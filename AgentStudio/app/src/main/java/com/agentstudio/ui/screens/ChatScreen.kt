@@ -1,6 +1,7 @@
 package com.agentstudio.ui.screens
 
 import androidx.compose.animation.*
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -17,7 +18,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.foundation.background
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -57,8 +57,7 @@ fun ChatScreen(
     }
     
     Box(
-        modifier = Modifier
-            .fillMaxSize()
+        modifier = Modifier.fillMaxSize()
     ) {
         // Misty dreamy background
         MistyBackground(
@@ -70,25 +69,29 @@ fun ChatScreen(
                 .fillMaxSize()
                 .systemBarsPadding()
         ) {
-            // Top bar with glass effect
+            // Top bar
             CenterAlignedTopAppBar(
                 title = {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.Center
                     ) {
-                        Box(
-                            modifier = Modifier.size(40.dp),
-                            contentAlignment = Alignment.Center
+                        // VenAI Logo
+                        Surface(
+                            modifier = Modifier.size(36.dp),
+                            shape = RoundedCornerShape(10.dp),
+                            color = Color(0xFF1e1e2e)
                         ) {
-                            CompactFormlessEntity(isThinking = isLoading)
+                            Box(contentAlignment = Alignment.Center) {
+                                ReplitThinkingAnimation(size = 26)
+                            }
                         }
                         Spacer(modifier = Modifier.width(10.dp))
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text(
-                                text = "Entity",
+                                text = "VenAI",
                                 fontWeight = FontWeight.Bold,
-                                fontSize = 17.sp,
+                                fontSize = 18.sp,
                                 color = Color(0xFFE2E8F0)
                             )
                             val modelName = FREE_MODELS.find { it.id == selectedModel }?.name ?: "Unknown"
@@ -129,7 +132,7 @@ fun ChatScreen(
                     .fillMaxWidth()
             ) {
                 if (messages.isEmpty()) {
-                    // Welcome screen with formless entity
+                    // Welcome screen
                     Column(
                         modifier = Modifier
                             .fillMaxSize()
@@ -137,19 +140,22 @@ fun ChatScreen(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.Center
                     ) {
-                        // Large formless entity
-                        Box(
-                            modifier = Modifier.size(200.dp),
-                            contentAlignment = Alignment.Center
+                        // Large logo
+                        Surface(
+                            modifier = Modifier.size(100.dp),
+                            shape = RoundedCornerShape(24.dp),
+                            color = Color(0xFF1e1e2e)
                         ) {
-                            LargeFormlessEntity(isThinking = false)
+                            Box(contentAlignment = Alignment.Center) {
+                                ReplitThinkingAnimation(size = 70)
+                            }
                         }
                         
                         Spacer(modifier = Modifier.height(28.dp))
                         
                         Text(
-                            text = "Tôi là Entity",
-                            fontSize = 26.sp,
+                            text = "VenAI",
+                            fontSize = 32.sp,
                             fontWeight = FontWeight.Bold,
                             color = Color(0xFFE2E8F0)
                         )
@@ -157,14 +163,14 @@ fun ChatScreen(
                         Spacer(modifier = Modifier.height(8.dp))
                         
                         Text(
-                            text = "Một thực thể phi hình thể\nsẵn sàng hỗ trợ bạn...",
-                            fontSize = 13.sp,
+                            text = "Trợ lý AI thông minh\nsẵn sàng hỗ trợ bạn",
+                            fontSize = 14.sp,
                             color = Color(0xFF94A3B8),
                             textAlign = TextAlign.Center,
-                            lineHeight = 20.sp
+                            lineHeight = 22.sp
                         )
                         
-                        Spacer(modifier = Modifier.height(32.dp))
+                        Spacer(modifier = Modifier.height(36.dp))
                         
                         // Quick action chips
                         Column(
@@ -172,27 +178,27 @@ fun ChatScreen(
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                GlowingChip(
+                                QuickChip(
                                     text = "Bạn làm được gì?",
                                     icon = Icons.Default.HelpOutline,
                                     onClick = { viewModel.sendMessage("Bạn có thể làm gì cho tôi?") }
                                 )
-                                GlowingChip(
-                                    text = "Tìm kiếm",
+                                QuickChip(
+                                    text = "Tìm kiếm web",
                                     icon = Icons.Default.Search,
                                     onClick = { viewModel.sendMessage("Tìm kiếm tin tức AI mới nhất") }
                                 )
                             }
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                GlowingChip(
+                                QuickChip(
                                     text = "Thời tiết",
                                     icon = Icons.Default.WbSunny,
                                     onClick = { viewModel.sendMessage("Thời tiết hôm nay thế nào?") }
                                 )
-                                GlowingChip(
-                                    text = "Mở app",
-                                    icon = Icons.Default.Apps,
-                                    onClick = { viewModel.sendMessage("Mở cài đặt điện thoại") }
+                                QuickChip(
+                                    text = "Viết code",
+                                    icon = Icons.Default.Code,
+                                    onClick = { viewModel.sendMessage("Viết một hàm Python để tính fibonacci") }
                                 )
                             }
                         }
@@ -256,9 +262,7 @@ fun ChatScreen(
                 }
             }
             
-            // ================================================
-            // FLOATING CHAT INPUT - ChatGPT Style
-            // ================================================
+            // Floating Chat Input
             FloatingChatInput(
                 inputText = inputText,
                 onInputChange = { inputText = it },
@@ -317,15 +321,13 @@ private fun FloatingChatInput(
     onSend: () -> Unit,
     isLoading: Boolean
 ) {
-    // Floating container with shadow
     Surface(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 12.dp, vertical = 8.dp),
         shape = RoundedCornerShape(28.dp),
         color = Color(0xFF1a1a2e).copy(alpha = 0.95f),
-        shadowElevation = 8.dp,
-        tonalElevation = 4.dp
+        shadowElevation = 8.dp
     ) {
         Row(
             modifier = Modifier
@@ -334,14 +336,13 @@ private fun FloatingChatInput(
                 .navigationBarsPadding(),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Input field
             OutlinedTextField(
                 value = inputText,
                 onValueChange = onInputChange,
                 modifier = Modifier.weight(1f),
                 placeholder = {
                     Text(
-                        "Nhắn tin cho Entity...",
+                        "Nhắn tin cho VenAI...",
                         color = Color(0xFF64748B),
                         fontSize = 14.sp
                     )
@@ -359,7 +360,6 @@ private fun FloatingChatInput(
                 maxLines = 5,
                 minLines = 1,
                 trailingIcon = {
-                    // Send button - always visible, animates based on text
                     IconButton(
                         onClick = onSend,
                         enabled = inputText.isNotBlank() && !isLoading,
@@ -370,8 +370,8 @@ private fun FloatingChatInput(
                                 if (inputText.isNotBlank() && !isLoading)
                                     Brush.radialGradient(
                                         colors = listOf(
-                                            Color(0xFF8B5CF6),
-                                            Color(0xFF6366F1)
+                                            Color(0xFFf26207),
+                                            Color(0xFFe2488b)
                                         )
                                     )
                                 else
@@ -400,7 +400,7 @@ private fun FloatingChatInput(
 }
 
 @Composable
-private fun GlowingChip(
+private fun QuickChip(
     text: String,
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     onClick: () -> Unit

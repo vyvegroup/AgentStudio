@@ -1,24 +1,39 @@
+import java.util.Properties
+import java.io.FileInputStream
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.serialization")
 }
 
+// Read API key from local.properties
+val localProperties = Properties()
+val localPropertiesFile = rootProject.file("local.properties")
+if (localPropertiesFile.exists()) {
+    localProperties.load(FileInputStream(localPropertiesFile))
+}
+
+val apiKey: String = localProperties.getProperty("api.key", "")
+
 android {
     namespace = "com.agentstudio"
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.agentstudio"
+        applicationId = "com.venai.app"
         minSdk = 26
         targetSdk = 34
-        versionCode = 3
-        versionName = "1.2.0"
+        versionCode = 4
+        versionName = "3.0.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
             useSupportLibrary = true
         }
+        
+        // Inject API key as BuildConfig field
+        buildConfigField("String", "API_KEY", "\"$apiKey\"")
     }
 
     buildTypes {
