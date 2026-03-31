@@ -1,8 +1,8 @@
 1<?xml version="1.0" encoding="utf-8"?>
 2<manifest xmlns:android="http://schemas.android.com/apk/res/android"
-3    package="com.agentstudio"
-4    android:versionCode="3"
-5    android:versionName="1.2.0" >
+3    package="com.venai.app"
+4    android:versionCode="7"
+5    android:versionName="3.2.1" >
 6
 7    <uses-sdk
 8        android:minSdkVersion="26"
@@ -17,12 +17,12 @@
 13
 14    <permission
 14-->[androidx.core:core:1.12.0] /home/z/.gradle/caches/transforms-3/abb5863ee4164a600a97f1e2612fb747/transformed/core-1.12.0/AndroidManifest.xml:22:5-24:47
-15        android:name="com.agentstudio.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
+15        android:name="com.venai.app.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
 15-->[androidx.core:core:1.12.0] /home/z/.gradle/caches/transforms-3/abb5863ee4164a600a97f1e2612fb747/transformed/core-1.12.0/AndroidManifest.xml:23:9-81
 16        android:protectionLevel="signature" />
 16-->[androidx.core:core:1.12.0] /home/z/.gradle/caches/transforms-3/abb5863ee4164a600a97f1e2612fb747/transformed/core-1.12.0/AndroidManifest.xml:24:9-44
 17
-18    <uses-permission android:name="com.agentstudio.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION" />
+18    <uses-permission android:name="com.venai.app.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION" />
 18-->[androidx.core:core:1.12.0] /home/z/.gradle/caches/transforms-3/abb5863ee4164a600a97f1e2612fb747/transformed/core-1.12.0/AndroidManifest.xml:26:5-97
 18-->[androidx.core:core:1.12.0] /home/z/.gradle/caches/transforms-3/abb5863ee4164a600a97f1e2612fb747/transformed/core-1.12.0/AndroidManifest.xml:26:22-94
 19
@@ -71,7 +71,7 @@
 42-->[androidx.emoji2:emoji2:1.4.0] /home/z/.gradle/caches/transforms-3/6516a0d21b204916a182afe55754a6fa/transformed/emoji2-1.4.0/AndroidManifest.xml:24:9-32:20
 43            android:name="androidx.startup.InitializationProvider"
 43-->[androidx.emoji2:emoji2:1.4.0] /home/z/.gradle/caches/transforms-3/6516a0d21b204916a182afe55754a6fa/transformed/emoji2-1.4.0/AndroidManifest.xml:25:13-67
-44            android:authorities="com.agentstudio.androidx-startup"
+44            android:authorities="com.venai.app.androidx-startup"
 44-->[androidx.emoji2:emoji2:1.4.0] /home/z/.gradle/caches/transforms-3/6516a0d21b204916a182afe55754a6fa/transformed/emoji2-1.4.0/AndroidManifest.xml:26:13-68
 45            android:exported="false" >
 45-->[androidx.emoji2:emoji2:1.4.0] /home/z/.gradle/caches/transforms-3/6516a0d21b204916a182afe55754a6fa/transformed/emoji2-1.4.0/AndroidManifest.xml:27:13-37

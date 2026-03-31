@@ -15,7 +15,7 @@
     <color name="secondary">#8B5CF6</color>
     <color name="surface">#1A1A2E</color>
     <color name="surface_variant">#252542</color>
-    <string name="app_name">AI Agent Studio</string>
+    <string name="app_name">VenAI</string>
     <style name="Theme.AgentStudio" parent="android:Theme.Material.NoActionBar">
         <item name="android:colorPrimary">@color/primary</item>
         <item name="android:colorPrimaryDark">@color/primary_dark</item>

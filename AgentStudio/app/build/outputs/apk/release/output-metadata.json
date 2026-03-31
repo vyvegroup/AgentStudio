@@ -4,15 +4,15 @@
     "type": "APK",
     "kind": "Directory"
   },
-  "applicationId": "com.agentstudio",
+  "applicationId": "com.venai.app",
   "variantName": "release",
   "elements": [
     {
       "type": "SINGLE",
       "filters": [],
       "attributes": [],
-      "versionCode": 3,
-      "versionName": "1.2.0",
+      "versionCode": 7,
+      "versionName": "3.2.1",
       "outputFile": "app-release-unsigned.apk"
     }
   ],

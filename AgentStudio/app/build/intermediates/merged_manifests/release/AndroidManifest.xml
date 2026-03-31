@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="com.agentstudio"
-    android:versionCode="3"
-    android:versionName="1.2.0" >
+    package="com.venai.app"
+    android:versionCode="7"
+    android:versionName="3.2.1" >
 
     <uses-sdk
         android:minSdkVersion="26"
@@ -12,10 +12,10 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
     <permission
-        android:name="com.agentstudio.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
+        android:name="com.venai.app.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
         android:protectionLevel="signature" />
 
-    <uses-permission android:name="com.agentstudio.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION" />
+    <uses-permission android:name="com.venai.app.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION" />
 
     <application
         android:name="com.agentstudio.AgentStudioApp"
@@ -41,7 +41,7 @@
 
         <provider
             android:name="androidx.startup.InitializationProvider"
-            android:authorities="com.agentstudio.androidx-startup"
+            android:authorities="com.venai.app.androidx-startup"
             android:exported="false" >
             <meta-data
                 android:name="androidx.emoji2.text.EmojiCompatInitializer"

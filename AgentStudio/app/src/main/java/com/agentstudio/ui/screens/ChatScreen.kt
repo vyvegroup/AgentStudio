@@ -1,7 +1,11 @@
 package com.agentstudio.ui.screens
 
 import androidx.compose.animation.*
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -13,6 +17,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.rounded.ArrowUpward
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -22,6 +27,7 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -92,7 +98,7 @@ fun ChatScreen(
                         // VenAI Logo with animation
                         Surface(
                             modifier = Modifier.size(38.dp),
-                            shape = RoundedCornerShape(11.dp),
+                            shape = RoundedCornerShape(12.dp),
                             color = if (isUsingLocal) Color(0xFF059669) else Color(0xFF1e1e2e)
                         ) {
                             Box(contentAlignment = Alignment.Center) {
@@ -136,7 +142,7 @@ fun ChatScreen(
                     }
                 },
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
-                    containerColor = Color(0x30000000),
+                    containerColor = Color(0x20000000),
                     titleContentColor = Color(0xFFE2E8F0)
                 ),
                 actions = {
@@ -183,7 +189,7 @@ fun ChatScreen(
                         // Large logo
                         Surface(
                             modifier = Modifier.size(100.dp),
-                            shape = RoundedCornerShape(24.dp),
+                            shape = RoundedCornerShape(28.dp),
                             color = if (isUsingLocal) Color(0xFF059669) else Color(0xFF1e1e2e)
                         ) {
                             Box(contentAlignment = Alignment.Center) {
@@ -303,7 +309,7 @@ fun ChatScreen(
                 // Error banner
                 if (error != null) {
                     Surface(
-                        color = Color(0x70000000),
+                        color = Color(0x80000000),
                         modifier = Modifier
                             .align(Alignment.TopCenter)
                             .fillMaxWidth()
@@ -341,8 +347,8 @@ fun ChatScreen(
                 }
             }
             
-            // Floating Chat Input
-            FloatingChatInput(
+            // Premium Floating Chat Input - Big Tech Style
+            PremiumFloatingChatInput(
                 inputText = inputText,
                 onInputChange = { inputText = it },
                 onSend = {
@@ -363,7 +369,6 @@ fun ChatScreen(
             selectedModel = selectedModel,
             onModelSelected = { modelId ->
                 viewModel.setModel(modelId)
-                showModelSelector = false
             },
             onDismiss = { showModelSelector = false },
             localModelManager = localModelManager
@@ -371,100 +376,176 @@ fun ChatScreen(
     }
 }
 
-// Modern floating chat input - ChatGPT style
+// Premium Floating Chat Input - ChatGPT/Big Tech Style
 @Composable
-private fun FloatingChatInput(
+private fun PremiumFloatingChatInput(
     inputText: String,
     onInputChange: (String) -> Unit,
     onSend: () -> Unit,
     isLoading: Boolean,
     isLocal: Boolean = false
 ) {
-    Surface(
+    val interactionSource = remember { MutableInteractionSource() }
+    val isFocused by interactionSource.collectIsFocusedAsState()
+    
+    // Animated scale for send button
+    val sendButtonScale by animateFloatAsState(
+        targetValue = if (inputText.isNotBlank() && !isLoading) 1f else 0.9f,
+        animationSpec = spring(stiffness = Spring.StiffnessMedium),
+        label = "sendButtonScale"
+    )
+    
+    // Glow animation
+    val infiniteTransition = rememberInfiniteTransition(label = "glow")
+    val glowAlpha by infiniteTransition.animateFloat(
+        initialValue = 0.3f,
+        targetValue = 0.6f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1500, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "glow"
+    )
+    
+    // Outer container with soft shadow
+    Box(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 8.dp),
-        shape = RoundedCornerShape(28.dp),
-        color = Color(0xFF1a1a2e).copy(alpha = 0.95f),
-        shadowElevation = 12.dp
+            .padding(horizontal = 12.dp, vertical = 8.dp)
     ) {
-        Row(
+        // Soft glow effect behind the input
+        if (isFocused || inputText.isNotBlank()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 56.dp)
+                    .graphicsLayer {
+                        shadowElevation = 16f
+                        shape = RoundedCornerShape(28.dp)
+                        clip = false
+                    }
+                    .background(
+                        if (isLocal) {
+                            Color(0xFF10B981).copy(alpha = glowAlpha * 0.1f)
+                        } else {
+                            Color(0xFF8B5CF6).copy(alpha = glowAlpha * 0.1f)
+                        },
+                        RoundedCornerShape(28.dp)
+                    )
+            )
+        }
+        
+        // Main input container
+        Surface(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 6.dp, vertical = 6.dp)
-                .navigationBarsPadding(),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            // Input field
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(horizontal = 12.dp)
-            ) {
-                if (inputText.isEmpty()) {
-                    Text(
-                        text = if (isLocal) "Nhắn tin cho Local AI..." else "Nhắn tin cho VenAI...",
-                        color = Color(0xFF64748B),
-                        fontSize = 15.sp
-                    )
-                }
-                BasicTextField(
-                    value = inputText,
-                    onValueChange = onInputChange,
-                    modifier = Modifier.fillMaxWidth(),
-                    textStyle = androidx.compose.ui.text.TextStyle(
-                        color = Color(0xFFE2E8F0),
-                        fontSize = 15.sp,
-                        lineHeight = 22.sp
-                    ),
-                    cursorBrush = SolidColor(
-                        if (isLocal) Color(0xFF10B981) else Color(0xFF8B5CF6)
-                    ),
-                    maxLines = 5,
-                    minLines = 1,
-                    decorationBox = { innerTextField ->
-                        innerTextField()
-                    }
+                .heightIn(min = 56.dp),
+            shape = RoundedCornerShape(28.dp),
+            color = Color(0xFF1a1a2e).copy(alpha = 0.97f),
+            tonalElevation = if (isFocused) 4.dp else 2.dp,
+            border = if (isFocused) {
+                androidx.compose.foundation.BorderStroke(
+                    width = 1.5.dp,
+                    color = if (isLocal) Color(0xFF10B981).copy(alpha = 0.5f) 
+                            else Color(0xFF8B5CF6).copy(alpha = 0.5f)
                 )
-            }
-            
-            // Send button
-            Box(
+            } else null
+        ) {
+            Row(
                 modifier = Modifier
-                    .size(42.dp)
-                    .clip(CircleShape)
-                    .background(
-                        if (inputText.isNotBlank() && !isLoading) {
-                            if (isLocal) {
-                                Brush.linearGradient(
-                                    colors = listOf(Color(0xFF059669), Color(0xFF10B981))
-                                )
-                            } else {
-                                Brush.linearGradient(
-                                    colors = listOf(Color(0xFFf26207), Color(0xFFe2488b))
-                                )
-                            }
-                        } else {
-                            SolidColor(Color(0xFF334155))
-                        }
-                    ),
-                contentAlignment = Alignment.Center
+                    .fillMaxWidth()
+                    .padding(horizontal = 4.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                IconButton(
-                    onClick = onSend,
-                    enabled = inputText.isNotBlank() && !isLoading,
-                    modifier = Modifier.size(42.dp)
+                // Text input area
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(horizontal = 16.dp, vertical = 12.dp)
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.ArrowUpward,
-                        contentDescription = "Send",
-                        tint = if (inputText.isNotBlank() && !isLoading)
-                            Color.White
-                        else
-                            Color(0xFF64748B),
-                        modifier = Modifier.size(20.dp)
+                    // Placeholder
+                    if (inputText.isEmpty()) {
+                        Text(
+                            text = if (isLocal) "Nhắn tin cho Local AI..." else "Nhắn tin cho VenAI...",
+                            color = Color(0xFF64748B),
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Normal
+                        )
+                    }
+                    
+                    // Text field
+                    BasicTextField(
+                        value = inputText,
+                        onValueChange = onInputChange,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 120.dp),
+                        textStyle = androidx.compose.ui.text.TextStyle(
+                            color = Color(0xFFF1F5F9),
+                            fontSize = 15.sp,
+                            lineHeight = 22.sp,
+                            fontWeight = FontWeight.Normal
+                        ),
+                        cursorBrush = SolidColor(
+                            if (isLocal) Color(0xFF10B981) else Color(0xFF8B5CF6)
+                        ),
+                        maxLines = 5,
+                        minLines = 1,
+                        interactionSource = interactionSource,
+                        decorationBox = { innerTextField ->
+                            innerTextField()
+                        }
                     )
                 }
+                
+                // Send button with premium styling
+                Box(
+                    modifier = Modifier
+                        .graphicsLayer {
+                            scaleX = sendButtonScale
+                            scaleY = sendButtonScale
+                        }
+                        .size(44.dp)
+                        .clip(CircleShape)
+                        .background(
+                            when {
+                                isLoading -> Color(0xFF374151)
+                                inputText.isNotBlank() -> {
+                                    if (isLocal) {
+                                        Color(0xFF10B981)
+                                    } else {
+                                        Color(0xFF8B5CF6)
+                                    }
+                                }
+                                else -> Color(0xFF374151)
+                            }
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    // Ripple effect
+                    if (inputText.isNotBlank() && !isLoading) {
+                        IconButton(
+                            onClick = onSend,
+                            modifier = Modifier.size(44.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.ArrowUpward,
+                                contentDescription = "Send",
+                                tint = Color.White,
+                                modifier = Modifier.size(22.dp)
+                            )
+                        }
+                    } else {
+                        Icon(
+                            imageVector = Icons.Rounded.ArrowUpward,
+                            contentDescription = "Send",
+                            tint = Color(0xFF6B7280),
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
+                }
+                
+                Spacer(modifier = Modifier.width(4.dp))
             }
         }
     }

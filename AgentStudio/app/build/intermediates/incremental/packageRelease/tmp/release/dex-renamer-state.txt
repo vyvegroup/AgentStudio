@@ -1,4 +1,4 @@
-#Tue Mar 31 18:37:32 UTC 2026
+#Tue Mar 31 22:38:03 UTC 2026
 base.0=/home/z/my-project/AgentStudio/app/build/intermediates/dex/release/minifyReleaseWithR8/classes.dex
 renamed.0=classes.dex
 path.0=classes.dex
