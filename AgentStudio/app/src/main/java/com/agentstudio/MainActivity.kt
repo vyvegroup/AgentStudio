@@ -16,7 +16,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             AgentStudioTheme {
                 Surface(modifier = Modifier.fillMaxSize()) {
-                    AgentStudioApp()
+                    AgentStudioContent()
                 }
             }
         }

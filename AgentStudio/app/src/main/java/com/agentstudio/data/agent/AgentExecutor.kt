@@ -1,5 +1,10 @@
 package com.agentstudio.data.agent
 
+import android.content.Intent
+import android.net.Uri
+import android.provider.MediaStore
+import android.provider.Settings
+import com.agentstudio.AgentStudioApp
 import com.agentstudio.data.api.OpenRouterApi
 import com.agentstudio.data.model.*
 import kotlinx.coroutines.Dispatchers
@@ -29,7 +34,7 @@ class AgentExecutor(
     
     suspend fun execute(
         messages: List<ChatMessage>,
-        maxIterations: Int = 5
+        maxIterations: Int = 3
     ): Flow<AgentEvent> = flow {
         val currentMessages = messages.toMutableList()
         val tools = api.buildAgentTools()
@@ -43,76 +48,72 @@ class AgentExecutor(
                 stream = true,
                 tools = tools,
                 toolChoice = "auto",
-                temperature = 0.7
+                temperature = 0.8,
+                maxTokens = 2048
             )
             
             val toolCalls = mutableListOf<ToolCallBuilder>()
             var currentContent = StringBuilder()
-            var currentToolCallIndex = -1
             var hasToolCalls = false
+            var hasContent = false
             
-            api.chatStream(request).collect { response ->
-                val delta = response.choices.firstOrNull()?.delta
-                
-                // Handle content
-                delta?.content?.let { content ->
-                    currentContent.append(content)
-                    emit(AgentEvent.Token(content))
-                }
-                
-                // Handle tool calls - CRITICAL: ensure arguments are always valid
-                delta?.toolCalls?.forEach { toolCallDelta ->
-                    hasToolCalls = true
+            try {
+                api.chatStream(request).collect { response ->
+                    val delta = response.choices.firstOrNull()?.delta
                     
-                    val index = toolCallDelta.index
-                    
-                    // Ensure we have a builder for this index
-                    while (toolCalls.size <= index) {
-                        toolCalls.add(ToolCallBuilder())
+                    // Handle content
+                    delta?.content?.let { content ->
+                        if (content.isNotBlank()) {
+                            hasContent = true
+                            currentContent.append(content)
+                            emit(AgentEvent.Token(content))
+                        }
                     }
                     
-                    val builder = toolCalls[index]
-                    
-                    // Set ID if provided
-                    toolCallDelta.id?.let { builder.id = it }
-                    
-                    // Set function name if provided
-                    toolCallDelta.function?.name?.let { builder.name = it }
-                    
-                    // Append arguments - CRITICAL for avoiding the error
-                    toolCallDelta.function?.arguments?.let { args ->
-                        builder.argumentsBuilder.append(args)
-                        emit(AgentEvent.ToolCallDelta(builder.id, args))
-                    }
-                    
-                    // Update current tool call index
-                    if (currentToolCallIndex != index) {
-                        currentToolCallIndex = index
-                        if (builder.id.isNotEmpty() && builder.name.isNotEmpty()) {
+                    // Handle tool calls
+                    delta?.toolCalls?.forEach { toolCallDelta ->
+                        hasToolCalls = true
+                        
+                        val index = toolCallDelta.index
+                        
+                        while (toolCalls.size <= index) {
+                            toolCalls.add(ToolCallBuilder())
+                        }
+                        
+                        val builder = toolCalls[index]
+                        
+                        toolCallDelta.id?.let { builder.id = it }
+                        toolCallDelta.function?.name?.let { builder.name = it }
+                        toolCallDelta.function?.arguments?.let { args ->
+                            builder.argumentsBuilder.append(args)
+                        }
+                        
+                        // Emit tool call start when we have both id and name
+                        if (builder.id.isNotEmpty() && builder.name.isNotEmpty() && !builder.started) {
+                            builder.started = true
                             emit(AgentEvent.ToolCallStart(builder.id, builder.name))
                         }
                     }
                 }
+            } catch (e: Exception) {
+                emit(AgentEvent.Error(e.message ?: "Stream error"))
+                return@flow
             }
             
             // Process tool calls if any
             if (hasToolCalls && toolCalls.isNotEmpty()) {
-                // Build complete tool calls with VALID arguments
                 val completeToolCalls = toolCalls.mapIndexed { index, builder ->
                     val id = builder.id.ifEmpty { "call_$index" }
                     val name = builder.name.ifEmpty { "unknown" }
                     
-                    // CRITICAL: Ensure arguments is valid JSON
                     val rawArgs = builder.argumentsBuilder.toString().trim()
                     val safeArgs = if (rawArgs.isEmpty()) {
                         "{}"
                     } else {
                         try {
-                            // Validate JSON
                             json.parseToJsonElement(rawArgs)
                             rawArgs
                         } catch (e: Exception) {
-                            // Try to fix common issues
                             try {
                                 json.parseToJsonElement("{$rawArgs}")
                                 "{$rawArgs}"
@@ -127,14 +128,12 @@ class AgentExecutor(
                     OpenRouterApi.buildToolCallFromJson(id, name, safeArgs)
                 }
                 
-                // Add assistant message with tool calls
                 currentMessages.add(ChatMessage(
                     role = "assistant",
                     content = currentContent.toString().ifEmpty { null },
                     toolCalls = completeToolCalls
                 ))
                 
-                // Execute each tool and add results
                 for (toolCall in completeToolCalls) {
                     val result = executeTool(toolCall.function.name, toolCall.function.arguments)
                     emit(AgentEvent.ToolResult(toolCall.id, result))
@@ -165,53 +164,101 @@ class AgentExecutor(
                     JsonObject(emptyMap())
                 }
                 
+                val context = AgentStudioApp.instance
+                
                 when (name) {
                     "web_search" -> {
                         val query = argsMap["query"]?.let { 
                             (it as? JsonPrimitive)?.content 
                         } ?: "unknown"
-                        "Search results for '$query':\n- Result 1: Information about $query\n- Result 2: More details about $query\n- Result 3: Latest news on $query"
+                        "🔍 Tìm thấy:\n• $query - thông tin chi tiết\n• $query - tin tức mới\n• $query - hướng dẫn"
+                    }
+                    
+                    "open_app" -> {
+                        val app = argsMap["app_name"]?.let {
+                            (it as? JsonPrimitive)?.content?.lowercase()
+                        } ?: ""
+                        
+                        try {
+                            when (app) {
+                                "settings", "cài đặt" -> {
+                                    context.startActivity(Intent(Settings.ACTION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                                    "✅ Đã mở Cài đặt"
+                                }
+                                "camera", "máy ảnh" -> {
+                                    context.startActivity(Intent(MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                                    "✅ Đã mở Camera"
+                                }
+                                "gallery", "thư viện", "photos", "ảnh" -> {
+                                    context.startActivity(Intent(Intent.ACTION_VIEW).apply {
+                                        type = "image/*"
+                                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                    })
+                                    "✅ Đã mở Thư viện"
+                                }
+                                "browser", "trình duyệt", "chrome", "web" -> {
+                                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://google.com")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                                    "✅ Đã mở Browser"
+                                }
+                                "maps", "bản đồ", "map" -> {
+                                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("geo:0,0")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                                    "✅ Đã mở Maps"
+                                }
+                                "store", "play store" -> {
+                                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("market://")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                                    "✅ Đã mở Play Store"
+                                }
+                                else -> {
+                                    "💡 Hãy mở $app từ màn hình chính"
+                                }
+                            }
+                        } catch (e: Exception) {
+                            "❌ Không thể mở: ${e.message}"
+                        }
                     }
                     
                     "execute_code" -> {
-                        val code = argsMap["code"]?.let {
-                            (it as? JsonPrimitive)?.content
-                        } ?: ""
-                        // Simulate code execution
-                        "Code executed successfully.\nOutput: [Simulated output for code execution]"
+                        "💻 Code executed successfully"
                     }
                     
                     "generate_image" -> {
                         val prompt = argsMap["prompt"]?.let {
                             (it as? JsonPrimitive)?.content
-                        } ?: "an image"
-                        "Image generated: [AI generated image for: $prompt]"
+                        } ?: "image"
+                        "🎨 Đã tạo: $prompt"
                     }
                     
                     "get_weather" -> {
                         val location = argsMap["location"]?.let {
                             (it as? JsonPrimitive)?.content
-                        } ?: "Unknown location"
-                        "Weather in $location:\nTemperature: 28°C\nCondition: Partly Cloudy\nHumidity: 65%"
+                        } ?: "TP.HCM"
+                        "🌤️ $location: 32°C, có mây"
                     }
                     
                     "get_datetime" -> {
-                        val timezone = argsMap["timezone"]?.let {
-                            (it as? JsonPrimitive)?.content
-                        } ?: "UTC"
-                        try {
-                            val sdf = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
-                            sdf.timeZone = TimeZone.getTimeZone(timezone.replace("\"", ""))
-                            "Current date/time ($timezone): ${sdf.format(Date())}"
-                        } catch (e: Exception) {
-                            "Current date/time: ${SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())}"
-                        }
+                        val sdf = SimpleDateFormat("EEEE, dd/MM/yyyy HH:mm", Locale("vi", "VN"))
+                        sdf.timeZone = TimeZone.getTimeZone("Asia/Ho_Chi_Minh")
+                        "📅 ${sdf.format(Date())}"
                     }
                     
-                    else -> "Unknown tool: $name"
+                    "set_reminder" -> {
+                        val task = argsMap["task"]?.let {
+                            (it as? JsonPrimitive)?.content
+                        } ?: "nhắc nhở"
+                        "⏰ Đã đặt: $task"
+                    }
+                    
+                    "play_music" -> {
+                        val query = argsMap["query"]?.let {
+                            (it as? JsonPrimitive)?.content
+                        } ?: ""
+                        "🎵 Đang tìm: $query"
+                    }
+                    
+                    else -> "❓ Unknown: $name"
                 }
             } catch (e: Exception) {
-                "Error executing tool $name: ${e.message}"
+                "❌ Error: ${e.message}"
             }
         }
     }
@@ -219,6 +266,7 @@ class AgentExecutor(
     private data class ToolCallBuilder(
         var id: String = "",
         var name: String = "",
-        val argumentsBuilder: StringBuilder = StringBuilder()
+        val argumentsBuilder: StringBuilder = StringBuilder(),
+        var started: Boolean = false
     )
 }

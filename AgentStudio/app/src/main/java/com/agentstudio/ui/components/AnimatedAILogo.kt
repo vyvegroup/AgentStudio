@@ -11,7 +11,6 @@ import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.unit.dp
-import kotlinx.coroutines.launch
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
@@ -59,25 +58,16 @@ fun AnimatedAILogo(
         label = "inner_rotation"
     )
     
-    // Neural pulse animation
-    val neuralPulse by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(3000, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "neural_pulse"
-    )
-    
     // Gradient colors
-    val gradientColors = listOf(
-        Color(0xFF6366F1),  // Primary indigo
-        Color(0xFF8B5CF6),  // Purple
-        Color(0xFF06B6D4),  // Cyan
-        Color(0xFF10B981),  // Green
-        Color(0xFF6366F1)   // Back to indigo
-    )
+    val gradientColors = remember {
+        listOf(
+            Color(0xFF6366F1),
+            Color(0xFF8B5CF6),
+            Color(0xFF06B6D4),
+            Color(0xFF10B981),
+            Color(0xFF6366F1)
+        )
+    }
     
     Canvas(
         modifier = modifier.size(size.dp)
@@ -115,7 +105,7 @@ fun AnimatedAILogo(
             )
         }
         
-        // Second ring (slightly smaller, different rotation)
+        // Second ring
         val secondRadius = baseRadius * 0.8f
         rotate(innerRotation, center) {
             drawArc(
@@ -132,66 +122,8 @@ fun AnimatedAILogo(
             )
         }
         
-        // Neural network nodes
-        val nodeCount = 6
-        val nodeRadius = baseRadius * 0.35f
-        val nodeSize = 4.dp.toPx()
-        
-        for (i in 0 until nodeCount) {
-            val angle = (2 * PI * i / nodeCount) + (rotation * PI / 180 * 0.5)
-            val nodeX = center.x + cos(angle).toFloat() * nodeRadius
-            val nodeY = center.y + sin(angle).toFloat() * nodeRadius
-            
-            // Node glow
-            drawCircle(
-                color = gradientColors[i % gradientColors.size].copy(alpha = 0.5f * pulse),
-                radius = nodeSize * 2,
-                center = Offset(nodeX, nodeY)
-            )
-            
-            // Node
-            drawCircle(
-                brush = Brush.radialGradient(
-                    colors = listOf(
-                        Color.White,
-                        gradientColors[i % gradientColors.size]
-                    ),
-                    center = Offset(nodeX, nodeY),
-                    radius = nodeSize
-                ),
-                radius = nodeSize,
-                center = Offset(nodeX, nodeY)
-            )
-            
-            // Connection lines between nodes
-            val nextI = (i + 1) % nodeCount
-            val nextAngle = (2 * PI * nextI / nodeCount) + (rotation * PI / 180 * 0.5)
-            val nextX = center.x + cos(nextAngle).toFloat() * nodeRadius
-            val nextY = center.y + sin(nextAngle).toFloat() * nodeRadius
-            
-            // Neural pulse traveling along connection
-            val pulseProgress = (neuralPulse + i * 0.1f) % 1f
-            val pulseX = nodeX + (nextX - nodeX) * pulseProgress
-            val pulseY = nodeY + (nextY - nodeY) * pulseProgress
-            
-            // Draw connection line
-            drawLine(
-                color = gradientColors[i % gradientColors.size].copy(alpha = 0.3f),
-                start = Offset(nodeX, nodeY),
-                end = Offset(nextX, nextY),
-                strokeWidth = 1.dp.toPx()
-            )
-            
-            // Draw traveling pulse
-            drawCircle(
-                color = Color.White.copy(alpha = 0.8f),
-                radius = 2.dp.toPx(),
-                center = Offset(pulseX, pulseY)
-            )
-        }
-        
         // Central AI core
-        val coreRadius = baseRadius * 0.2f
+        val coreRadius = baseRadius * 0.25f
         
         // Core glow
         drawCircle(
@@ -229,27 +161,9 @@ fun AnimatedAILogo(
             radius = coreRadius * 0.4f,
             center = center
         )
-        
-        // Orbiting particles
-        val particleCount = 3
-        for (i in 0 until particleCount) {
-            val particleAngle = (2 * PI * i / particleCount) + (rotation * 2 * PI / 180)
-            val particleRadius = baseRadius * 1.2f
-            val particleX = center.x + cos(particleAngle).toFloat() * particleRadius
-            val particleY = center.y + sin(particleAngle).toFloat() * particleRadius
-            
-            drawCircle(
-                color = gradientColors[i % gradientColors.size].copy(alpha = 0.6f),
-                radius = 2.dp.toPx(),
-                center = Offset(particleX, particleY)
-            )
-        }
     }
 }
 
-/**
- * Compact animated logo for chat messages
- */
 @Composable
 fun CompactAnimatedLogo(
     modifier: Modifier = Modifier
@@ -260,9 +174,6 @@ fun CompactAnimatedLogo(
     )
 }
 
-/**
- * Large animated logo for splash/loading screens
- */
 @Composable
 fun LargeAnimatedLogo(
     modifier: Modifier = Modifier

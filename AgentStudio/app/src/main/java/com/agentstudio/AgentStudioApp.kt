@@ -1,26 +1,25 @@
 package com.agentstudio
 
+import android.app.Application
 import android.content.Context
-import androidx.compose.runtime.*
-import androidx.compose.ui.platform.LocalContext
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.preferencesDataStore
-import androidx.lifecycle.viewmodel.compose.viewModel
-import com.agentstudio.data.repository.PreferencesRepository
-import com.agentstudio.ui.screens.ChatScreen
-import com.agentstudio.ui.screens.ChatViewModelFactory
 
-private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "agent_studio_prefs")
-
-@Composable
-fun AgentStudioApp() {
-    val context = LocalContext.current
-    val preferencesRepository = remember { PreferencesRepository(context.dataStore) }
+class AgentStudioApp : Application() {
     
-    val viewModel = viewModel<com.agentstudio.ui.screens.ChatViewModel>(
-        factory = ChatViewModelFactory(preferencesRepository)
-    )
+    companion object {
+        lateinit var instance: AgentStudioApp private set
+        
+        private val Context._dataStore: DataStore<Preferences> by preferencesDataStore(name = "agent_studio_prefs")
+        
+        fun getDataStore(): DataStore<Preferences> {
+            return instance._dataStore
+        }
+    }
     
-    ChatScreen(viewModel = viewModel)
+    override fun onCreate() {
+        super.onCreate()
+        instance = this
+    }
 }

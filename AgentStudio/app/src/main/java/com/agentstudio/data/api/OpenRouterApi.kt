@@ -37,13 +37,11 @@ class OpenRouterApi(private val apiKey: String) {
     companion object {
         private const val BASE_URL = "https://openrouter.ai/api/v1"
         
-        // Build tool call with ALWAYS valid arguments
         fun buildToolCall(
             id: String,
             functionName: String,
             arguments: Map<String, JsonElement> = emptyMap()
         ): ToolCall {
-            // CRITICAL: arguments must ALWAYS be a valid JSON string
             val argumentsJson = JsonObject(arguments).toString()
             return ToolCall(
                 id = id,
@@ -55,13 +53,11 @@ class OpenRouterApi(private val apiKey: String) {
             )
         }
         
-        // Build tool call from JSON string directly
         fun buildToolCallFromJson(
             id: String,
             functionName: String,
             argumentsJson: String
         ): ToolCall {
-            // Ensure arguments is valid JSON, default to empty object if invalid
             val safeArgs = try {
                 Json.parseToJsonElement(argumentsJson)
                 argumentsJson
@@ -110,7 +106,6 @@ class OpenRouterApi(private val apiKey: String) {
                 try {
                     val response = json.decodeFromString<ChatResponse>(data)
                     
-                    // Check for errors
                     if (response.error != null) {
                         close(Exception("API Error: ${response.error.message}"))
                         return
@@ -174,7 +169,7 @@ class OpenRouterApi(private val apiKey: String) {
         }
     }
     
-    // Build tools for agent
+    // Build comprehensive tools for smart assistant
     fun buildAgentTools(): List<Tool> {
         return listOf(
             // Web Search Tool
@@ -182,103 +177,153 @@ class OpenRouterApi(private val apiKey: String) {
                 type = "function",
                 function = ToolFunction(
                     name = "web_search",
-                    description = "Search the web for current information. Use this when you need up-to-date information.",
+                    description = "Tìm kiếm thông tin trên web. Sử dụng khi cần thông tin cập nhật, tin tức, hoặc kiến thức mới.",
                     parameters = JsonObject(mapOf(
                         "type" to JsonPrimitive("object"),
                         "properties" to JsonObject(mapOf(
                             "query" to JsonObject(mapOf(
                                 "type" to JsonPrimitive("string"),
-                                "description" to JsonPrimitive("The search query")
-                            )),
-                            "num_results" to JsonObject(mapOf(
-                                "type" to JsonPrimitive("integer"),
-                                "description" to JsonPrimitive("Number of results to return"),
-                                "default" to JsonPrimitive(5)
+                                "description" to JsonPrimitive("Nội dung cần tìm kiếm")
                             ))
                         )),
                         "required" to JsonArray(listOf(JsonPrimitive("query")))
                     ))
                 )
             ),
-            // Code Execution Tool
+            
+            // Open App Tool
             Tool(
                 type = "function",
                 function = ToolFunction(
-                    name = "execute_code",
-                    description = "Execute Python code for calculations, data analysis, or other tasks.",
+                    name = "open_app",
+                    description = "Mở ứng dụng trên điện thoại. Có thể mở: settings, camera, gallery, browser, maps, play store, hoặc tên ứng dụng khác.",
                     parameters = JsonObject(mapOf(
                         "type" to JsonPrimitive("object"),
                         "properties" to JsonObject(mapOf(
-                            "code" to JsonObject(mapOf(
+                            "app_name" to JsonObject(mapOf(
                                 "type" to JsonPrimitive("string"),
-                                "description" to JsonPrimitive("Python code to execute")
-                            )),
-                            "language" to JsonObject(mapOf(
-                                "type" to JsonPrimitive("string"),
-                                "description" to JsonPrimitive("Programming language"),
-                                "default" to JsonPrimitive("python")
+                                "description" to JsonPrimitive("Tên ứng dụng cần mở (settings, camera, gallery, browser, maps, store, ...)")
                             ))
                         )),
-                        "required" to JsonArray(listOf(JsonPrimitive("code")))
+                        "required" to JsonArray(listOf(JsonPrimitive("app_name")))
                     ))
                 )
             ),
-            // Image Generation Tool
-            Tool(
-                type = "function",
-                function = ToolFunction(
-                    name = "generate_image",
-                    description = "Generate an image from a text description.",
-                    parameters = JsonObject(mapOf(
-                        "type" to JsonPrimitive("object"),
-                        "properties" to JsonObject(mapOf(
-                            "prompt" to JsonObject(mapOf(
-                                "type" to JsonPrimitive("string"),
-                                "description" to JsonPrimitive("Image description")
-                            )),
-                            "size" to JsonObject(mapOf(
-                                "type" to JsonPrimitive("string"),
-                                "description" to JsonPrimitive("Image size (1024x1024, 512x512)"),
-                                "default" to JsonPrimitive("1024x1024")
-                            ))
-                        )),
-                        "required" to JsonArray(listOf(JsonPrimitive("prompt")))
-                    ))
-                )
-            ),
+            
             // Get Weather Tool
             Tool(
                 type = "function",
                 function = ToolFunction(
                     name = "get_weather",
-                    description = "Get current weather for a location.",
+                    description = "Lấy thông tin thời tiết tại một địa điểm.",
                     parameters = JsonObject(mapOf(
                         "type" to JsonPrimitive("object"),
                         "properties" to JsonObject(mapOf(
                             "location" to JsonObject(mapOf(
                                 "type" to JsonPrimitive("string"),
-                                "description" to JsonPrimitive("City name or coordinates")
+                                "description" to JsonPrimitive("Tên thành phố hoặc địa điểm")
                             ))
                         )),
                         "required" to JsonArray(listOf(JsonPrimitive("location")))
                     ))
                 )
             ),
+            
             // Get Date/Time Tool
             Tool(
                 type = "function",
                 function = ToolFunction(
                     name = "get_datetime",
-                    description = "Get current date and time.",
+                    description = "Lấy ngày giờ hiện tại.",
                     parameters = JsonObject(mapOf(
                         "type" to JsonPrimitive("object"),
                         "properties" to JsonObject(mapOf(
                             "timezone" to JsonObject(mapOf(
                                 "type" to JsonPrimitive("string"),
-                                "description" to JsonPrimitive("Timezone (e.g., Asia/Ho_Chi_Minh)"),
-                                "default" to JsonPrimitive("UTC")
+                                "description" to JsonPrimitive("Múi giờ (mặc định: Asia/Ho_Chi_Minh)"),
+                                "default" to JsonPrimitive("Asia/Ho_Chi_Minh")
                             ))
                         ))
+                    ))
+                )
+            ),
+            
+            // Set Reminder Tool
+            Tool(
+                type = "function",
+                function = ToolFunction(
+                    name = "set_reminder",
+                    description = "Đặt lời nhắc nhở cho người dùng.",
+                    parameters = JsonObject(mapOf(
+                        "type" to JsonPrimitive("object"),
+                        "properties" to JsonObject(mapOf(
+                            "task" to JsonObject(mapOf(
+                                "type" to JsonPrimitive("string"),
+                                "description" to JsonPrimitive("Nội dung cần nhắc")
+                            )),
+                            "time" to JsonObject(mapOf(
+                                "type" to JsonPrimitive("string"),
+                                "description" to JsonPrimitive("Thời gian nhắc (ví dụ: 2 giờ chiều, sáng mai)")
+                            ))
+                        )),
+                        "required" to JsonArray(listOf(JsonPrimitive("task")))
+                    ))
+                )
+            ),
+            
+            // Play Music Tool
+            Tool(
+                type = "function",
+                function = ToolFunction(
+                    name = "play_music",
+                    description = "Phát nhạc hoặc tìm kiếm bài hát.",
+                    parameters = JsonObject(mapOf(
+                        "type" to JsonPrimitive("object"),
+                        "properties" to JsonObject(mapOf(
+                            "query" to JsonObject(mapOf(
+                                "type" to JsonPrimitive("string"),
+                                "description" to JsonPrimitive("Tên bài hát, nghệ sĩ, hoặc thể loại nhạc")
+                            ))
+                        )),
+                        "required" to JsonArray(listOf(JsonPrimitive("query")))
+                    ))
+                )
+            ),
+            
+            // Generate Image Tool
+            Tool(
+                type = "function",
+                function = ToolFunction(
+                    name = "generate_image",
+                    description = "Tạo hình ảnh từ mô tả văn bản.",
+                    parameters = JsonObject(mapOf(
+                        "type" to JsonPrimitive("object"),
+                        "properties" to JsonObject(mapOf(
+                            "prompt" to JsonObject(mapOf(
+                                "type" to JsonPrimitive("string"),
+                                "description" to JsonPrimitive("Mô tả hình ảnh cần tạo")
+                            ))
+                        )),
+                        "required" to JsonArray(listOf(JsonPrimitive("prompt")))
+                    ))
+                )
+            ),
+            
+            // Execute Code Tool
+            Tool(
+                type = "function",
+                function = ToolFunction(
+                    name = "execute_code",
+                    description = "Thực thi code Python cho tính toán hoặc xử lý dữ liệu.",
+                    parameters = JsonObject(mapOf(
+                        "type" to JsonPrimitive("object"),
+                        "properties" to JsonObject(mapOf(
+                            "code" to JsonObject(mapOf(
+                                "type" to JsonPrimitive("string"),
+                                "description" to JsonPrimitive("Code Python cần chạy")
+                            ))
+                        )),
+                        "required" to JsonArray(listOf(JsonPrimitive("code")))
                     ))
                 )
             )
