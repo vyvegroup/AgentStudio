@@ -3,270 +3,219 @@ package com.agentstudio.domain.agent
 import android.util.Log
 import com.agentstudio.data.api.OpenRouterApi
 import com.agentstudio.data.model.*
-import com.agentstudio.data.repository.AgentRepository
 import com.agentstudio.domain.model.AgentTools
 import com.agentstudio.domain.model.ToolResult
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import kotlinx.serialization.json.Json
 
 class AgentExecutor(
-    private val agentRepository: AgentRepository,
+    private val api: OpenRouterApi,
     private val toolHandler: ToolHandler,
     private val scope: CoroutineScope
 ) {
     private val _state = MutableStateFlow<AgentState>(AgentState.Idle)
     val state: StateFlow<AgentState> = _state.asStateFlow()
     
-    private val _currentResponse = MutableStateFlow("")
-    val currentResponse: StateFlow<String> = _currentResponse.asStateFlow()
-    
-    private val _pendingToolCalls = MutableStateFlow<List<PendingToolCall>>(emptyList())
-    val pendingToolCalls: StateFlow<List<PendingToolCall>> = _pendingToolCalls.asStateFlow()
+    private val _debugLog = MutableStateFlow(StringBuilder())
+    val debugLog: StateFlow<StringBuilder> = _debugLog.asStateFlow()
     
     private var executionJob: Job? = null
-    private val json = Json { ignoreUnknownKeys = true }
+    private var systemPrompt: String = ""
     
-    fun execute(
-        userInput: String,
-        onMessage: (AgentMessage) -> Unit,
-        onToolCall: (PendingToolCall) -> Unit,
-        onComplete: () -> Unit,
-        onError: (String) -> Unit
-    ) {
-        if (_state.value != AgentState.Idle) {
-            Log.w(TAG, "Agent is already executing, ignoring new request")
-            return
-        }
-        
-        executionJob = scope.launch {
-            try {
-                _state.value = AgentState.Processing
-                _currentResponse.value = ""
-                _pendingToolCalls.value = emptyList()
-                
-                // Add user message immediately
-                onMessage(AgentMessage.UserMessage(content = userInput))
-                
-                var hasToolCalls = false
-                var iteration = 0
-                val maxIterations = 10
-                
-                do {
-                    hasToolCalls = false
-                    
-                    agentRepository.sendMessage(
-                        content = if (iteration == 0) userInput else "",
-                        tools = AgentTools.ALL_TOOLS,
-                        onStreamChunk = { chunk ->
-                            _currentResponse.value += chunk
-                        },
-                        onToolCall = { toolCall ->
-                            hasToolCalls = true
-                            val pending = PendingToolCall(
-                                id = toolCall.id,
-                                name = toolCall.function.name,
-                                arguments = toolCall.function.arguments
-                            )
-                            _pendingToolCalls.value += pending
-                            onToolCall(pending)
-                        },
-                        onComplete = { response ->
-                            Log.d(TAG, "Stream completed")
-                        },
-                        onError = { error ->
-                            _state.value = AgentState.Error(error)
-                            onError(error)
-                        }
-                    )
-                    
-                    // Wait for streaming to complete
-                    while (_state.value == AgentState.Processing && _currentResponse.value.isNotEmpty()) {
-                        kotlinx.coroutines.delay(100)
-                    }
-                    
-                    // Finalize current response
-                    val responseText = _currentResponse.value
-                    if (responseText.isNotEmpty()) {
-                        onMessage(AgentMessage.AgentResponse(
-                            content = responseText,
-                            isStreaming = false
-                        ))
-                        _currentResponse.value = ""
-                    }
-                    
-                    // Execute pending tool calls
-                    if (_pendingToolCalls.value.isNotEmpty()) {
-                        _state.value = AgentState.ExecutingTools
-                        
-                        _pendingToolCalls.value.forEach { pendingCall ->
-                            val result = toolHandler.executeTool(pendingCall.name, pendingCall.arguments)
-                            
-                            onMessage(AgentMessage.ToolMessage(
-                                toolCallId = pendingCall.id,
-                                toolName = pendingCall.name,
-                                arguments = pendingCall.arguments,
-                                result = result.output,
-                                isSuccess = result.success
-                            ))
-                            
-                            // Send tool result back to agent
-                            agentRepository.sendToolResult(
-                                toolCallId = pendingCall.id,
-                                toolName = pendingCall.name,
-                                result = result
-                            )
-                        }
-                        
-                        _pendingToolCalls.value = emptyList()
-                    }
-                    
-                    iteration++
-                    
-                } while (hasToolCalls && iteration < maxIterations)
-                
-                _state.value = AgentState.Idle
-                onComplete()
-                
-            } catch (e: Exception) {
-                Log.e(TAG, "Error during execution", e)
-                _state.value = AgentState.Error(e.message ?: "Unknown error")
-                onError(e.message ?: "Unknown error")
-            }
-        }
-    }
+    // Conversation history for context
+    private val conversationHistory = mutableListOf<MessageContent>()
     
     fun executeWithFlow(
         userInput: String,
         onEvent: (ExecutionEvent) -> Unit
     ) {
         if (_state.value != AgentState.Idle) {
-            Log.w(TAG, "Agent is already executing, ignoring new request")
+            Log.w(TAG, "Agent is already executing")
             return
         }
         
         executionJob = scope.launch {
             try {
                 _state.value = AgentState.Processing
-                _currentResponse.value = ""
+                _debugLog.value = StringBuilder()
+                
+                appendDebug("╔══════════════════════════════════════════╗")
+                appendDebug("║          NEW EXECUTION STARTED           ║")
+                appendDebug("╚══════════════════════════════════════════╝")
+                appendDebug("📝 User Input: ${userInput.take(100)}...")
+                
+                // Build messages with history
+                val messages = mutableListOf<MessageContent>()
+                
+                // Add system prompt
+                if (systemPrompt.isNotEmpty()) {
+                    messages.add(MessageContent(role = "system", content = systemPrompt))
+                    appendDebug("📋 System prompt added (${systemPrompt.length} chars)")
+                }
+                
+                // Add conversation history
+                messages.addAll(conversationHistory)
+                appendDebug("📚 History: ${conversationHistory.size} messages")
+                
+                // Add current user message
+                val userMessage = MessageContent(role = "user", content = userInput)
+                messages.add(userMessage)
+                conversationHistory.add(userMessage)
                 
                 onEvent(ExecutionEvent.UserMessage(userInput))
                 
-                // Build messages list
-                val messages = mutableListOf<MessageContent>()
-                messages.add(MessageContent(role = "user", content = userInput))
-                
                 var iteration = 0
-                val maxIterations = 10
+                val maxIterations = 15
                 
                 do {
-                    val events = mutableListOf<ToolCallRequest>()
+                    iteration++
+                    appendDebug("\n┌──────────────────────────────────────────┐")
+                    appendDebug("│  ITERATION $iteration/$maxIterations")
+                    appendDebug("└──────────────────────────────────────────┘")
                     
-                    agentRepository.streamChatFlow(
-                        messages = messages,
-                        tools = AgentTools.ALL_TOOLS
-                    ).collect { event ->
+                    val toolCalls = mutableListOf<ToolCallRequest>()
+                    var responseContent = StringBuilder()
+                    var responseComplete = false
+                    
+                    // Stream the response
+                    api.streamChatFlow(messages, AgentTools.ALL_TOOLS).collect { event ->
                         when (event) {
                             is OpenRouterApi.StreamEvent.Content -> {
-                                _currentResponse.value += event.text
+                                responseContent.append(event.text)
                                 onEvent(ExecutionEvent.StreamChunk(event.text))
                             }
                             is OpenRouterApi.StreamEvent.ToolCall -> {
-                                events.add(event.toolCall)
-                                onEvent(ExecutionEvent.ToolCallReceived(
-                                    PendingToolCall(
-                                        id = event.toolCall.id,
-                                        name = event.toolCall.function.name,
-                                        arguments = event.toolCall.function.arguments
-                                    )
-                                ))
+                                appendDebug("🔧 TOOL CALL: ${event.toolCall.function.name}")
+                                appendDebug("   Args: ${event.toolCall.function.arguments.take(100)}...")
+                                toolCalls.add(event.toolCall)
                             }
                             is OpenRouterApi.StreamEvent.Complete -> {
-                                // Done
+                                responseComplete = true
+                                appendDebug("✅ Stream complete")
                             }
                             is OpenRouterApi.StreamEvent.Error -> {
+                                appendDebug("❌ ERROR: ${event.message}")
                                 _state.value = AgentState.Error(event.message)
                                 onEvent(ExecutionEvent.Error(event.message))
                             }
                         }
                     }
                     
-                    // Add assistant message
-                    if (_currentResponse.value.isNotEmpty()) {
-                        messages.add(MessageContent(
+                    // Add assistant message to history
+                    val assistantContent = responseContent.toString()
+                    if (assistantContent.isNotEmpty() || toolCalls.isNotEmpty()) {
+                        val assistantMessage = MessageContent(
                             role = "assistant",
-                            content = _currentResponse.value
-                        ))
-                        onEvent(ExecutionEvent.ResponseComplete(_currentResponse.value))
-                        _currentResponse.value = ""
-                    }
-                    
-                    // Execute tools
-                    if (events.isNotEmpty()) {
-                        _state.value = AgentState.ExecutingTools
+                            content = assistantContent.ifEmpty { null },
+                            toolCalls = if (toolCalls.isNotEmpty()) toolCalls else null
+                        )
+                        messages.add(assistantMessage)
+                        conversationHistory.add(assistantMessage)
                         
-                        for (toolCall in events) {
-                            onEvent(ExecutionEvent.ToolExecutionStarted(
-                                toolCall.id,
-                                toolCall.function.name
-                            ))
-                            
-                            val result = toolHandler.executeTool(
-                                toolCall.function.name,
-                                toolCall.function.arguments
-                            )
-                            
-                            onEvent(ExecutionEvent.ToolExecutionComplete(
-                                toolCall.id,
-                                toolCall.function.name,
-                                result
-                            ))
-                            
-                            // Add tool result to messages
-                            messages.add(MessageContent(
-                                role = "tool",
-                                content = if (result.success) result.output else "Error: ${result.error}",
-                                toolCallId = toolCall.id,
-                                name = toolCall.function.name
-                            ))
+                        if (assistantContent.isNotEmpty()) {
+                            onEvent(ExecutionEvent.ResponseComplete(assistantContent))
+                            appendDebug("💬 Response: ${assistantContent.take(150)}...")
                         }
                     }
                     
-                    iteration++
+                    // Execute tools if any
+                    if (toolCalls.isNotEmpty()) {
+                        _state.value = AgentState.ExecutingTools
+                        appendDebug("\n⚡ EXECUTING ${toolCalls.size} TOOL(S)")
+                        
+                        for (toolCall in toolCalls) {
+                            val toolName = toolCall.function.name
+                            val toolArgs = toolCall.function.arguments
+                            
+                            appendDebug("\n┌─────────────────────────────────────────┐")
+                            appendDebug("│ 🛠️  $toolName")
+                            appendDebug("└─────────────────────────────────────────┘")
+                            
+                            onEvent(ExecutionEvent.ToolExecutionStarted(
+                                toolCall.id,
+                                toolName
+                            ))
+                            
+                            val result = toolHandler.executeTool(toolName, toolArgs)
+                            
+                            appendDebug("📊 Result: ${if (result.success) "✅ SUCCESS" else "❌ FAILED"}")
+                            if (result.success) {
+                                appendDebug("📄 Output: ${result.output.take(200)}${if (result.output.length > 200) "..." else ""}")
+                            } else {
+                                appendDebug("⚠️ Error: ${result.error}")
+                            }
+                            
+                            onEvent(ExecutionEvent.ToolExecutionComplete(
+                                toolCall.id,
+                                toolName,
+                                result
+                            ))
+                            
+                            // Add tool result to conversation
+                            val toolMessage = MessageContent(
+                                role = "tool",
+                                content = if (result.success) result.output else "Error: ${result.error}",
+                                toolCallId = toolCall.id,
+                                name = toolName
+                            )
+                            messages.add(toolMessage)
+                            conversationHistory.add(toolMessage)
+                        }
+                    }
                     
-                } while (events.isNotEmpty() && iteration < maxIterations)
+                    delay(100)
+                    
+                } while (toolCalls.isNotEmpty() && iteration < maxIterations)
+                
+                if (iteration >= maxIterations) {
+                    appendDebug("\n⚠️ Max iterations reached!")
+                }
+                
+                appendDebug("\n╔══════════════════════════════════════════╗")
+                appendDebug("║        EXECUTION COMPLETE                ║")
+                appendDebug("║  Iterations: $iteration")
+                appendDebug("║  History size: ${conversationHistory.size}")
+                appendDebug("╚══════════════════════════════════════════╝")
                 
                 _state.value = AgentState.Idle
                 onEvent(ExecutionEvent.Complete)
                 
             } catch (e: Exception) {
-                Log.e(TAG, "Error during execution", e)
+                Log.e(TAG, "Execution error", e)
+                appendDebug("\n❌ EXCEPTION: ${e.message}")
+                e.printStackTrace()
                 _state.value = AgentState.Error(e.message ?: "Unknown error")
                 onEvent(ExecutionEvent.Error(e.message ?: "Unknown error"))
             }
         }
     }
     
+    private fun appendDebug(message: String) {
+        _debugLog.value = StringBuilder(_debugLog.value).append("\n$message")
+        Log.d(TAG, message)
+    }
+    
+    fun getDebugLog(): String = _debugLog.value.toString()
+    
     fun cancel() {
         executionJob?.cancel()
         executionJob = null
-        agentRepository.cancelStream()
         _state.value = AgentState.Idle
-        _currentResponse.value = ""
-        _pendingToolCalls.value = emptyList()
     }
     
     fun reset() {
         cancel()
-        agentRepository.clearHistory()
+        conversationHistory.clear()
+        _debugLog.value = StringBuilder()
     }
     
     fun setSystemPrompt(prompt: String) {
-        agentRepository.setSystemPrompt(prompt)
+        systemPrompt = prompt
     }
     
     sealed class AgentState {
@@ -275,12 +224,6 @@ class AgentExecutor(
         object ExecutingTools : AgentState()
         data class Error(val message: String) : AgentState()
     }
-    
-    data class PendingToolCall(
-        val id: String,
-        val name: String,
-        val arguments: String
-    )
     
     sealed class ExecutionEvent {
         data class UserMessage(val content: String) : ExecutionEvent()
@@ -292,6 +235,12 @@ class AgentExecutor(
         object Complete : ExecutionEvent()
         data class Error(val message: String) : ExecutionEvent()
     }
+    
+    data class PendingToolCall(
+        val id: String,
+        val name: String,
+        val arguments: String
+    )
     
     companion object {
         private const val TAG = "AgentExecutor"

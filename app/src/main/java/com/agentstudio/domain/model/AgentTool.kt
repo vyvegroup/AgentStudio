@@ -39,53 +39,54 @@ data class ToolParameter(
     val type: String,
     val description: String,
     val required: Boolean = true,
-    val enum: List<String>? = null,
-    val default: String? = null
+    val enum: List<String>? = null
 )
 
 object AgentTools {
     
+    // ==================== FILE TOOLS ====================
+    
     val CREATE_FILE = AgentTool(
         name = "create_file",
-        description = "Create a new file with the specified content. Use this to create new source files, configuration files, or any text-based file.",
+        description = "Create a new file with the specified content. Creates parent directories if needed. Use absolute paths starting with /storage/emulated/0/Documents/AgentStudioProject/",
         parameters = mapOf(
             "path" to ToolParameter(
                 type = "string",
-                description = "The path where the file should be created. Can be relative to the current directory or absolute."
+                description = "The full absolute path where the file should be created (e.g., /storage/emulated/0/Documents/AgentStudioProject/hello.txt)"
             ),
             "content" to ToolParameter(
                 type = "string",
-                description = "The content to write to the file."
+                description = "The content to write to the file"
             )
         )
     )
     
     val READ_FILE = AgentTool(
         name = "read_file",
-        description = "Read the contents of a file. Returns the file content as a string.",
+        description = "Read the contents of a file and return it as a string. Use absolute paths.",
         parameters = mapOf(
             "path" to ToolParameter(
                 type = "string",
-                description = "The path of the file to read."
+                description = "The full absolute path of the file to read (e.g., /storage/emulated/0/Documents/AgentStudioProject/hello.txt)"
             )
         )
     )
     
     val EDIT_FILE = AgentTool(
         name = "edit_file",
-        description = "Edit an existing file by replacing specific content. The old_content must match exactly what's in the file.",
+        description = "Edit an existing file by replacing specific text. The old_content must match exactly.",
         parameters = mapOf(
             "path" to ToolParameter(
                 type = "string",
-                description = "The path of the file to edit."
+                description = "The full absolute path of the file to edit"
             ),
             "old_content" to ToolParameter(
                 type = "string",
-                description = "The exact text to find and replace."
+                description = "The exact text to find and replace"
             ),
             "new_content" to ToolParameter(
                 type = "string",
-                description = "The new text to replace the old content with."
+                description = "The new text to replace with"
             )
         )
     )
@@ -96,7 +97,7 @@ object AgentTools {
         parameters = mapOf(
             "path" to ToolParameter(
                 type = "string",
-                description = "The path of the file or directory to delete."
+                description = "The full absolute path of the file or directory to delete"
             )
         )
     )
@@ -107,11 +108,11 @@ object AgentTools {
         parameters = mapOf(
             "query" to ToolParameter(
                 type = "string",
-                description = "The search query to match against file names."
+                description = "The search query to match against file names"
             ),
             "directory" to ToolParameter(
                 type = "string",
-                description = "The directory to search in. Defaults to current directory.",
+                description = "The directory to search in (default: /storage/emulated/0/Documents/AgentStudioProject)",
                 required = false
             )
         )
@@ -119,11 +120,11 @@ object AgentTools {
     
     val LIST_DIRECTORY = AgentTool(
         name = "list_directory",
-        description = "List the contents of a directory. Returns a list of files and subdirectories.",
+        description = "List the contents of a directory, showing files and subdirectories. Returns the list of items with type indicators.",
         parameters = mapOf(
             "path" to ToolParameter(
                 type = "string",
-                description = "The path of the directory to list.",
+                description = "The full path of the directory to list. Default: /storage/emulated/0/Documents/AgentStudioProject",
                 required = false
             )
         )
@@ -135,12 +136,83 @@ object AgentTools {
         parameters = mapOf(
             "path" to ToolParameter(
                 type = "string",
-                description = "The path of the directory to create."
+                description = "The full absolute path of the directory to create"
             )
         )
     )
     
-    val ALL_TOOLS = listOf(
+    // ==================== WEB TOOLS ====================
+    
+    val WEB_SEARCH = AgentTool(
+        name = "web_search",
+        description = "Search the web for current information. Returns relevant search results with titles, URLs, and snippets. Use this for finding recent news, facts, or any current information.",
+        parameters = mapOf(
+            "query" to ToolParameter(
+                type = "string",
+                description = "The search query"
+            ),
+            "max_results" to ToolParameter(
+                type = "integer",
+                description = "Maximum number of results to return (default: 10)",
+                required = false
+            )
+        )
+    )
+    
+    val WIKI_SEARCH = AgentTool(
+        name = "wiki_search",
+        description = "Search Wikipedia for encyclopedia-style information. Best for factual, historical, or educational content.",
+        parameters = mapOf(
+            "query" to ToolParameter(
+                type = "string",
+                description = "The search query for Wikipedia"
+            ),
+            "max_results" to ToolParameter(
+                type = "integer",
+                description = "Maximum number of results (default: 5)",
+                required = false
+            )
+        )
+    )
+    
+    // ==================== IMAGE TOOLS ====================
+    
+    val IMAGE_SEARCH = AgentTool(
+        name = "image_search",
+        description = "Search for images on Gelbooru image board. Use tags to find specific images. Use underscores for multi-word tags (e.g., 'blue_eyes', 'white_hair'). Returns image URLs and metadata.",
+        parameters = mapOf(
+            "tags" to ToolParameter(
+                type = "string",
+                description = "Search tags separated by spaces (e.g., 'cat cute' or 'blue_eyes white_hair'). Use underscores for multi-word tags."
+            ),
+            "limit" to ToolParameter(
+                type = "integer",
+                description = "Number of images to return (default: 10, max: 50)",
+                required = false
+            ),
+            "rating" to ToolParameter(
+                type = "string",
+                description = "Content rating filter",
+                required = false,
+                enum = listOf("safe", "all")
+            )
+        )
+    )
+    
+    val IMAGE_INFO = AgentTool(
+        name = "image_info",
+        description = "Get detailed information about a specific image by ID from Gelbooru.",
+        parameters = mapOf(
+            "id" to ToolParameter(
+                type = "integer",
+                description = "The image ID from Gelbooru"
+            )
+        )
+    )
+    
+    // ==================== ALL TOOLS ====================
+    
+    val FILE_TOOLS = listOf(
         CREATE_FILE,
         READ_FILE,
         EDIT_FILE,
@@ -149,4 +221,16 @@ object AgentTools {
         LIST_DIRECTORY,
         CREATE_DIRECTORY
     )
+    
+    val WEB_TOOLS = listOf(
+        WEB_SEARCH,
+        WIKI_SEARCH
+    )
+    
+    val IMAGE_TOOLS = listOf(
+        IMAGE_SEARCH,
+        IMAGE_INFO
+    )
+    
+    val ALL_TOOLS = FILE_TOOLS + WEB_TOOLS + IMAGE_TOOLS
 }

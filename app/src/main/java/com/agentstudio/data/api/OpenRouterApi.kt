@@ -8,166 +8,29 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
-import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import okhttp3.*
 import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.sse.EventSource
-import okhttp3.sse.EventSourceListener
-import okhttp3.sse.EventSources
-import java.io.IOException
 import java.util.concurrent.TimeUnit
 
-class OpenRouterApi(private val apiKey: String) {
+class OpenRouterApi(
+    private val apiKey: String,
+    private val modelId: String = Constants.MODEL_ID
+) {
     
     private val json = Json {
         ignoreUnknownKeys = true
         encodeDefaults = true
         isLenient = true
+        explicitNulls = false  // Don't encode null values
     }
     
     private val client = OkHttpClient.Builder()
         .connectTimeout(60, TimeUnit.SECONDS)
-        .readTimeout(120, TimeUnit.SECONDS)
+        .readTimeout(180, TimeUnit.SECONDS)
         .writeTimeout(60, TimeUnit.SECONDS)
         .build()
-    
-    private val eventSourceFactory = EventSources.createFactory(client)
-    
-    fun streamChat(
-        messages: List<MessageContent>,
-        tools: List<AgentTool>? = null,
-        onChunk: (String) -> Unit,
-        onToolCall: (ToolCallRequest) -> Unit,
-        onComplete: (OpenRouterResponse?) -> Unit,
-        onError: (String) -> Unit
-    ): EventSource? {
-        val toolDefinitions = tools?.map { it.toToolDefinition() }
-        
-        val request = OpenRouterRequest(
-            model = Constants.MODEL_ID,
-            messages = messages,
-            stream = true,
-            tools = toolDefinitions,
-            toolChoice = if (tools != null) "auto" else null
-        )
-        
-        val requestBody = RequestBody.create(
-            "application/json".toMediaType(),
-            json.encodeToString(request)
-        )
-        
-        val httpRequest = Request.Builder()
-            .url("${Constants.OPENROUTER_BASE_URL}/chat/completions")
-            .addHeader("Authorization", "Bearer $apiKey")
-            .addHeader("Content-Type", "application/json")
-            .addHeader("HTTP-Referer", Constants.APP_REFERER)
-            .addHeader("X-Title", Constants.APP_NAME)
-            .post(requestBody)
-            .build()
-        
-        val listener = object : EventSourceListener() {
-            private var accumulatedContent = StringBuilder()
-            private var toolCalls = mutableMapOf<Int, ToolCallBuilder>()
-            
-            override fun onEvent(
-                eventSource: EventSource,
-                id: String?,
-                type: String?,
-                data: String
-            ) {
-                if (data == "[DONE]") {
-                    val response = buildFinalResponse(accumulatedContent.toString(), toolCalls)
-                    onComplete(response)
-                    return
-                }
-                
-                try {
-                    val chunk = json.decodeFromString<StreamChunk>(data)
-                    chunk.choices.forEach { choice ->
-                        choice.delta.content?.let { content ->
-                            accumulatedContent.append(content)
-                            onChunk(content)
-                        }
-                        
-                        choice.delta.toolCalls?.forEach { deltaToolCall ->
-                            val index = deltaToolCall.index
-                            val builder = toolCalls.getOrPut(index) { ToolCallBuilder() }
-                            
-                            deltaToolCall.id?.let { builder.id = it }
-                            deltaToolCall.function?.name?.let { builder.name = it }
-                            deltaToolCall.function?.arguments?.let { builder.arguments.append(it) }
-                            
-                            if (builder.isComplete()) {
-                                val toolCall = builder.build()
-                                onToolCall(toolCall)
-                            }
-                        }
-                    }
-                } catch (e: Exception) {
-                    Log.e(TAG, "Error parsing stream chunk", e)
-                }
-            }
-            
-            override fun onClosed(eventSource: EventSource) {
-                val response = buildFinalResponse(accumulatedContent.toString(), toolCalls)
-                onComplete(response)
-            }
-            
-            override fun onFailure(eventSource: EventSource, t: Throwable?, response: Response?) {
-                val errorMsg = t?.message ?: response?.message ?: "Unknown error"
-                Log.e(TAG, "Stream failure: $errorMsg", t)
-                onError(errorMsg)
-            }
-        }
-        
-        return eventSourceFactory.newEventSource(httpRequest, listener)
-    }
-    
-    suspend fun completeChat(
-        messages: List<MessageContent>,
-        tools: List<AgentTool>? = null
-    ): Result<OpenRouterResponse> = withContext(Dispatchers.IO) {
-        try {
-            val toolDefinitions = tools?.map { it.toToolDefinition() }
-            
-            val request = OpenRouterRequest(
-                model = Constants.MODEL_ID,
-                messages = messages,
-                stream = false,
-                tools = toolDefinitions,
-                toolChoice = if (tools != null) "auto" else null
-            )
-            
-            val requestBody = RequestBody.create(
-                "application/json".toMediaType(),
-                json.encodeToString(request)
-            )
-            
-            val httpRequest = Request.Builder()
-                .url("${Constants.OPENROUTER_BASE_URL}/chat/completions")
-                .addHeader("Authorization", "Bearer $apiKey")
-                .addHeader("Content-Type", "application/json")
-                .addHeader("HTTP-Referer", Constants.APP_REFERER)
-                .addHeader("X-Title", Constants.APP_NAME)
-                .post(requestBody)
-                .build()
-            
-            val response = client.newCall(httpRequest).execute()
-            
-            if (response.isSuccessful) {
-                val body = response.body?.string()
-                body?.let {
-                    Result.success(json.decodeFromString(it))
-                } ?: Result.failure(Exception("Empty response body"))
-            } else {
-                Result.failure(Exception("HTTP ${response.code}: ${response.message}"))
-            }
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
     
     fun streamChatFlow(
         messages: List<MessageContent>,
@@ -175,17 +38,50 @@ class OpenRouterApi(private val apiKey: String) {
     ): Flow<StreamEvent> = flow {
         val toolDefinitions = tools?.map { it.toToolDefinition() }
         
-        val request = OpenRouterRequest(
-            model = Constants.MODEL_ID,
-            messages = messages,
-            stream = true,
-            tools = toolDefinitions,
-            toolChoice = if (tools != null) "auto" else null
-        )
+        // Build request with proper structure
+        val requestMap = buildMap {
+            put("model", modelId)
+            put("messages", messages.map { msg ->
+                buildMap {
+                    put("role", msg.role)
+                    msg.content?.let { put("content", it) }
+                    msg.toolCalls?.let { put("tool_calls", it) }
+                    msg.toolCallId?.let { put("tool_call_id", it) }
+                    msg.name?.let { put("name", it) }
+                }
+            })
+            put("stream", true)
+            toolDefinitions?.let { 
+                put("tools", it)
+                put("tool_choice", "auto")
+            }
+            put("max_tokens", 4096)
+            put("temperature", 0.7)
+        }
+        
+        val requestJson = json.encodeToString(requestMap)
+        
+        Log.d(TAG, "═══════════════════════════════════════════")
+        Log.d(TAG, "API Request to: ${Constants.OPENROUTER_BASE_URL}/chat/completions")
+        Log.d(TAG, "Model: $modelId")
+        Log.d(TAG, "Messages: ${messages.size}")
+        Log.d(TAG, "Tools: ${toolDefinitions?.size ?: 0}")
+        
+        // Log tools
+        toolDefinitions?.forEach { td ->
+            Log.d(TAG, "  Tool: ${td.function.name} - ${td.function.description?.take(50)}...")
+        }
+        
+        // Log messages
+        messages.forEachIndexed { index, msg ->
+            Log.d(TAG, "  Msg[$index]: ${msg.role} - ${(msg.content?.take(50) ?: "tool_call")}...")
+        }
+        
+        Log.d(TAG, "Request JSON length: ${requestJson.length}")
         
         val requestBody = RequestBody.create(
             "application/json".toMediaType(),
-            json.encodeToString(request)
+            requestJson
         )
         
         val httpRequest = Request.Builder()
@@ -196,75 +92,102 @@ class OpenRouterApi(private val apiKey: String) {
             .addHeader("X-Title", Constants.APP_NAME)
             .post(requestBody)
             .build()
-            
-        var toolCalls = mutableMapOf<Int, ToolCallBuilder>()
+        
+        // Track tool calls by index
+        val toolCalls = mutableMapOf<Int, ToolCallBuilder>()
+        var lastEmittedToolCall = mutableSetOf<String>()
         
         client.newCall(httpRequest).execute().use { response ->
             if (!response.isSuccessful) {
-                emit(StreamEvent.Error("HTTP ${response.code}: ${response.message}"))
+                val errorBody = response.body?.string() ?: "No error body"
+                Log.e(TAG, "API Error: HTTP ${response.code}")
+                Log.e(TAG, "Error body: $errorBody")
+                emit(StreamEvent.Error("HTTP ${response.code}: $errorBody"))
                 return@use
             }
+            
+            Log.d(TAG, "═══════════════════════════════════════════")
+            Log.d(TAG, "Stream started successfully")
             
             response.body?.source()?.use { source ->
                 while (!source.exhausted()) {
                     val line = source.readUtf8Line() ?: continue
-                    if (!line.startsWith("data: ")) continue
                     
-                    val data = line.removePrefix("data: ").trim()
-                    if (data == "[DONE]") {
+                    // Handle SSE format
+                    val dataLine = when {
+                        line.startsWith("data: ") -> line.removePrefix("data: ").trim()
+                        line.startsWith(":") -> continue  // Keep-alive
+                        line.isBlank() -> continue
+                        else -> continue
+                    }
+                    
+                    if (dataLine == "[DONE]") {
+                        Log.d(TAG, "Stream [DONE] received")
+                        
+                        // Emit any remaining complete tool calls
+                        toolCalls.values.forEach { builder ->
+                            if (builder.isComplete() && builder.id !in lastEmittedToolCall) {
+                                val toolCall = builder.build()
+                                Log.d(TAG, "Final tool call: ${toolCall.function.name}")
+                                emit(StreamEvent.ToolCall(toolCall))
+                                lastEmittedToolCall.add(builder.id)
+                            }
+                        }
+                        
                         emit(StreamEvent.Complete)
                         return@use
                     }
                     
                     try {
-                        val chunk = json.decodeFromString<StreamChunk>(data)
+                        val chunk = json.decodeFromString<StreamChunk>(dataLine)
                         chunk.choices.forEach { choice ->
+                            // Handle content
                             choice.delta.content?.let { content ->
-                                emit(StreamEvent.Content(content))
+                                if (content.isNotEmpty()) {
+                                    emit(StreamEvent.Content(content))
+                                }
                             }
                             
+                            // Handle reasoning (for DeepSeek R1 and other thinking models)
+                            choice.delta.reasoning?.let { reasoning ->
+                                if (reasoning.isNotEmpty()) {
+                                    // Treat reasoning as content for now
+                                    emit(StreamEvent.Content(reasoning))
+                                }
+                            }
+                            
+                            // Handle tool calls - accumulate
                             choice.delta.toolCalls?.forEach { deltaToolCall ->
                                 val index = deltaToolCall.index
                                 val builder = toolCalls.getOrPut(index) { ToolCallBuilder() }
                                 
-                                deltaToolCall.id?.let { builder.id = it }
-                                deltaToolCall.function?.name?.let { builder.name = it }
-                                deltaToolCall.function?.arguments?.let { builder.arguments.append(it) }
-                                
-                                if (builder.isComplete()) {
-                                    emit(StreamEvent.ToolCall(builder.build()))
-                                    toolCalls.remove(index)
+                                deltaToolCall.id?.let { 
+                                    builder.id = it
+                                }
+                                deltaToolCall.function?.name?.let { 
+                                    builder.name = it
+                                    Log.d(TAG, "Tool name received: $it (index: $index)")
+                                }
+                                deltaToolCall.function?.arguments?.let { args ->
+                                    builder.arguments.append(args)
+                                    
+                                    // Check if complete and emit
+                                    if (builder.isComplete() && builder.id !in lastEmittedToolCall) {
+                                        val toolCall = builder.build()
+                                        Log.d(TAG, "Complete tool call: ${toolCall.function.name} with ${toolCall.function.arguments.length} chars args")
+                                        emit(StreamEvent.ToolCall(toolCall))
+                                        lastEmittedToolCall.add(builder.id)
+                                    }
                                 }
                             }
                         }
                     } catch (e: Exception) {
-                        Log.e(TAG, "Error parsing chunk: $data", e)
+                        Log.e(TAG, "Error parsing chunk: ${dataLine.take(100)}...", e)
                     }
                 }
             }
         }
     }.flowOn(Dispatchers.IO)
-    
-    private fun buildFinalResponse(
-        content: String,
-        toolCalls: Map<Int, ToolCallBuilder>
-    ): OpenRouterResponse {
-        return OpenRouterResponse(
-            id = "chatcmpl-${System.currentTimeMillis()}",
-            choices = listOf(
-                Choice(
-                    index = 0,
-                    message = MessageContent(
-                        role = "assistant",
-                        content = content.ifEmpty { null },
-                        toolCalls = toolCalls.values.filter { it.isComplete() }.map { it.build() }
-                            .ifEmpty { null }
-                    ),
-                    finishReason = if (toolCalls.isNotEmpty()) "tool_calls" else "stop"
-                )
-            )
-        )
-    }
     
     private data class ToolCallBuilder(
         var id: String = "",

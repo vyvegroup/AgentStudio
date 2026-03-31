@@ -67,7 +67,7 @@ data class PropertyDefinition(
     val description: String? = null,
     val enum: List<String>? = null,
     @SerialName("default")
-    val defaultValue: String? = null
+    val default: String? = null
 )
 
 // API Response Models
@@ -92,6 +92,7 @@ data class Choice(
 data class DeltaContent(
     val role: String? = null,
     val content: String? = null,
+    val reasoning: String? = null,
     @SerialName("tool_calls")
     val toolCalls: List<DeltaToolCall>? = null
 )

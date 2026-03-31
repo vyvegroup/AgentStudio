@@ -1,7 +1,7 @@
 {
     "logs": [
         {
-            "outputFile": "com.agentstudio.app-mergeDebugResources-64:/values-is/values-is.xml",
+            "outputFile": "com.agentstudio.app-mergeDebugResources-65:/values-is/values-is.xml",
             "map": [
                 {
                     "source": "/home/z/.gradle/caches/transforms-3/1bbdbdf0bf58772d6e3733c00927b2c3/transformed/ui-release/res/values-is/values-is.xml",

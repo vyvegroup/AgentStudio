@@ -1,14 +1,12 @@
 package com.agentstudio.ui.viewmodel
 
 import android.app.Application
-import android.util.Log
+import android.content.Context
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.agentstudio.BuildConfig
 import com.agentstudio.data.api.OpenRouterApi
 import com.agentstudio.data.model.AgentMessage
-import com.agentstudio.data.model.ChatSession
-import com.agentstudio.data.repository.AgentRepository
 import com.agentstudio.data.repository.FileRepository
 import com.agentstudio.domain.agent.AgentExecutor
 import com.agentstudio.domain.agent.ToolHandler
@@ -19,55 +17,68 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
+private const val PREFS_NAME = "agent_studio_prefs"
+private const val KEY_MODEL_ID = "selected_model_id"
+
 class AgentViewModel(application: Application) : AndroidViewModel(application) {
     
+    private val prefs = application.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    
+    // Dynamic model selection
+    private var currentModelId: String = prefs.getString(KEY_MODEL_ID, Constants.MODEL_ID) ?: Constants.MODEL_ID
+    
     private val apiKey = BuildConfig.OPENROUTER_API_KEY
-    private val openRouterApi = OpenRouterApi(apiKey)
-    private val agentRepository = AgentRepository(openRouterApi)
+    private var api = OpenRouterApi(apiKey, currentModelId)
     private val fileRepository = FileRepository(application)
     private val toolHandler = ToolHandler(fileRepository)
-    private val agentExecutor = AgentExecutor(agentRepository, toolHandler, viewModelScope)
+    private var agentExecutor = AgentExecutor(api, toolHandler, viewModelScope)
     
     private val _messages = MutableStateFlow<List<AgentMessage>>(emptyList())
     val messages: StateFlow<List<AgentMessage>> = _messages.asStateFlow()
     
-    private val _currentSession = MutableStateFlow<ChatSession?>(null)
-    val currentSession: StateFlow<ChatSession?> = _currentSession.asStateFlow()
-    
     private val _isProcessing = MutableStateFlow(false)
     val isProcessing: StateFlow<Boolean> = _isProcessing.asStateFlow()
-    
-    private val _streamingContent = MutableStateFlow("")
-    val streamingContent: StateFlow<String> = _streamingContent.asStateFlow()
-    
-    private val _pendingToolCalls = MutableStateFlow<List<AgentExecutor.PendingToolCall>>(emptyList())
-    val pendingToolCalls: StateFlow<List<AgentExecutor.PendingToolCall>> = _pendingToolCalls.asStateFlow()
     
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
     
-    private val _agentState = MutableStateFlow<AgentExecutor.AgentState>(AgentExecutor.AgentState.Idle)
-    val agentState: StateFlow<AgentExecutor.AgentState> = _agentState.asStateFlow()
+    private val _debugLog = MutableStateFlow("")
+    val debugLog: StateFlow<String> = _debugLog.asStateFlow()
     
-    private var streamingMessageId: String? = null
+    private val _showDebug = MutableStateFlow(false)
+    val showDebug: StateFlow<Boolean> = _showDebug.asStateFlow()
+    
+    private val _currentModel = MutableStateFlow(currentModelId)
+    val currentModel: StateFlow<String> = _currentModel.asStateFlow()
+    
+    private var currentStreamingMessageId: String? = null
     
     init {
-        // Set default system prompt
         agentExecutor.setSystemPrompt(Constants.DEFAULT_SYSTEM_PROMPT)
         
-        // Observe agent state
         viewModelScope.launch {
             agentExecutor.state.collect { state ->
-                _agentState.value = state
                 _isProcessing.value = state != AgentExecutor.AgentState.Idle
             }
         }
         
-        // Observe current response
         viewModelScope.launch {
-            agentExecutor.currentResponse.collect { response ->
-                _streamingContent.value = response
+            agentExecutor.debugLog.collect { log ->
+                _debugLog.value = log.toString()
             }
+        }
+    }
+    
+    fun setModel(modelId: String) {
+        if (modelId != currentModelId) {
+            currentModelId = modelId
+            _currentModel.value = modelId
+            prefs.edit().putString(KEY_MODEL_ID, modelId).apply()
+            
+            // Recreate API and executor with new model
+            api = OpenRouterApi(apiKey, modelId)
+            agentExecutor = AgentExecutor(api, toolHandler, viewModelScope)
+            agentExecutor.setSystemPrompt(Constants.DEFAULT_SYSTEM_PROMPT)
         }
     }
     
@@ -76,114 +87,162 @@ class AgentViewModel(application: Application) : AndroidViewModel(application) {
         
         viewModelScope.launch {
             _error.value = null
+            currentStreamingMessageId = null
             
-            // Add user message immediately to UI
+            // Add user message
             val userMessage = AgentMessage.UserMessage(content = content)
             addMessage(userMessage)
             
-            // Add placeholder for agent response
-            val agentMessage = AgentMessage.AgentResponse(
-                content = "",
-                isStreaming = true
-            )
-            streamingMessageId = agentMessage.id
-            addMessage(agentMessage)
+            // Create streaming message placeholder
+            val messageId = java.util.UUID.randomUUID().toString()
+            currentStreamingMessageId = messageId
             
             agentExecutor.executeWithFlow(content) { event ->
                 when (event) {
                     is AgentExecutor.ExecutionEvent.UserMessage -> {
-                        // Already handled above
+                        // Already added above
                     }
                     is AgentExecutor.ExecutionEvent.StreamChunk -> {
-                        // Update streaming message
-                        streamingMessageId?.let { id ->
-                            updateMessage(id) { msg ->
-                                (msg as? AgentMessage.AgentResponse)?.let {
-                                    it.copy(content = it.content + event.text, isStreaming = true)
-                                } ?: msg
-                            }
+                        updateOrCreateStreamingMessage(messageId) { current ->
+                            (current as? AgentMessage.AgentResponse)?.let {
+                                it.copy(content = it.content + event.text, isStreaming = true)
+                            } ?: AgentMessage.AgentResponse(
+                                id = messageId,
+                                content = event.text,
+                                isStreaming = true
+                            )
                         }
                     }
                     is AgentExecutor.ExecutionEvent.ResponseComplete -> {
-                        // Mark streaming as complete
-                        streamingMessageId?.let { id ->
-                            updateMessage(id) { msg ->
-                                (msg as? AgentMessage.AgentResponse)?.let {
-                                    it.copy(isStreaming = false)
-                                } ?: msg
-                            }
-                        }
-                        streamingMessageId = null
+                        finalizeStreamingMessage(messageId, event.content)
+                        currentStreamingMessageId = null
                     }
                     is AgentExecutor.ExecutionEvent.ToolCallReceived -> {
-                        _pendingToolCalls.update { it + event.toolCall }
+                        // Show tool call indicator if needed
                     }
                     is AgentExecutor.ExecutionEvent.ToolExecutionStarted -> {
-                        // Tool execution started
-                    }
-                    is AgentExecutor.ExecutionEvent.ToolExecutionComplete -> {
-                        // Remove from pending
-                        _pendingToolCalls.update { calls ->
-                            calls.filter { it.id != event.id }
-                        }
-                        
-                        // Add tool message
-                        val toolMessage = AgentMessage.ToolMessage(
+                        // Show loading indicator with tool name
+                        val loadingMessage = AgentMessage.ToolMessage(
                             toolCallId = event.id,
                             toolName = event.name,
                             arguments = "",
-                            result = event.result.output,
-                            isSuccess = event.result.success
+                            result = "⏳ Executing ${event.name}...",
+                            isSuccess = true
                         )
-                        addMessage(toolMessage)
+                        addMessage(loadingMessage)
+                    }
+                    is AgentExecutor.ExecutionEvent.ToolExecutionComplete -> {
+                        // Update tool result message
+                        updateToolMessage(event.id, event.name, event.result.output, event.result.success)
+                        
+                        // Create new streaming message for next AI response
+                        currentStreamingMessageId = java.util.UUID.randomUUID().toString()
                     }
                     is AgentExecutor.ExecutionEvent.Complete -> {
-                        streamingMessageId = null
+                        currentStreamingMessageId = null
+                        // Finalize any remaining streaming message
+                        _messages.update { messages ->
+                            messages.map { msg ->
+                                if (msg is AgentMessage.AgentResponse && msg.isStreaming) {
+                                    msg.copy(isStreaming = false)
+                                } else msg
+                            }
+                        }
                     }
                     is AgentExecutor.ExecutionEvent.Error -> {
                         _error.value = event.message
-                        streamingMessageId = null
+                        currentStreamingMessageId = null
+                        // Finalize streaming message on error
+                        _messages.update { messages ->
+                            messages.map { msg ->
+                                if (msg is AgentMessage.AgentResponse && msg.isStreaming) {
+                                    msg.copy(isStreaming = false)
+                                } else msg
+                            }
+                        }
                     }
                 }
             }
         }
     }
     
+    private fun addMessage(message: AgentMessage) {
+        _messages.update { it + message }
+    }
+    
+    private fun updateOrCreateStreamingMessage(id: String, update: (AgentMessage?) -> AgentMessage) {
+        _messages.update { messages ->
+            val existingIndex = messages.indexOfFirst { it.id == id }
+            if (existingIndex >= 0) {
+                messages.mapIndexed { index, msg ->
+                    if (index == existingIndex) update(msg) else msg
+                }
+            } else {
+                messages + update(null)
+            }
+        }
+    }
+    
+    private fun finalizeStreamingMessage(id: String, content: String) {
+        _messages.update { messages ->
+            messages.map { msg ->
+                if (msg.id == id) {
+                    AgentMessage.AgentResponse(
+                        id = id,
+                        content = content,
+                        isStreaming = false
+                    )
+                } else msg
+            }
+        }
+    }
+    
+    private fun updateToolMessage(toolCallId: String, toolName: String, result: String, success: Boolean) {
+        _messages.update { messages ->
+            messages.map { msg ->
+                if (msg is AgentMessage.ToolMessage && msg.toolCallId == toolCallId && msg.result.contains("Executing")) {
+                    msg.copy(
+                        result = result.take(1500) + if (result.length > 1500) "\n... (truncated)" else "",
+                        isSuccess = success
+                    )
+                } else msg
+            }
+        }
+    }
+    
+    fun toggleDebug() {
+        _showDebug.value = !_showDebug.value
+    }
+    
     fun cancelExecution() {
         agentExecutor.cancel()
-        streamingMessageId = null
-        _streamingContent.value = ""
+        currentStreamingMessageId = null
+        _isProcessing.value = false
     }
     
     fun clearChat() {
         agentExecutor.reset()
         _messages.value = emptyList()
-        _currentSession.value = null
         _error.value = null
+        _debugLog.value = ""
+        currentStreamingMessageId = null
     }
     
     fun setSystemPrompt(prompt: String) {
         agentExecutor.setSystemPrompt(prompt)
     }
     
-    private fun addMessage(message: AgentMessage) {
-        _messages.update { it + message }
-    }
-    
-    private fun updateMessage(id: String, update: (AgentMessage) -> AgentMessage) {
-        _messages.update { messages ->
-            messages.map { if (it.id == id) update(it) else it }
-        }
-    }
-    
     fun retry() {
-        // Get last user message and retry
         val lastUserMessage = _messages.value.lastOrNull { it is AgentMessage.UserMessage }
         if (lastUserMessage != null) {
             val content = (lastUserMessage as AgentMessage.UserMessage).content
             clearChat()
             sendMessage(content)
         }
+    }
+    
+    fun clearError() {
+        _error.value = null
     }
 }
 
