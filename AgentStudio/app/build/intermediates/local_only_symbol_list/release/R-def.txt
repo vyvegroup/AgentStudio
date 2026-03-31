@@ -1,0 +1,22 @@
+R_DEF: Internal format may change without notice
+local
+color accent_cyan
+color accent_green
+color accent_orange
+color accent_pink
+color background
+color ic_launcher_background
+color on_background
+color on_primary
+color on_secondary
+color on_surface
+color primary
+color primary_dark
+color secondary
+color surface
+color surface_variant
+drawable ic_launcher_foreground
+mipmap ic_launcher
+mipmap ic_launcher_round
+string app_name
+style Theme.AgentStudio
