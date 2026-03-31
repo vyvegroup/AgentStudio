@@ -61,6 +61,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.agentstudio.data.model.AgentMessage
+import com.agentstudio.ui.components.ReplitStyleAILogo
 import com.agentstudio.ui.theme.*
 import com.agentstudio.ui.viewmodel.AgentViewModel
 import com.agentstudio.ui.viewmodel.AgentViewModelFactory
@@ -292,28 +293,11 @@ fun ModernTopBar(
                 .padding(horizontal = 12.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Animated AI Icon with gradient
-            Box(
-                modifier = Modifier
-                    .size(42.dp)
-                    .background(
-                        Brush.linearGradient(
-                            colors = listOf(GradientPurple, GradientCyan, GradientPink),
-                            start = Offset(animatedOffset - 500, 0f),
-                            end = Offset(animatedOffset, 500f)
-                        ),
-                        CircleShape
-                    )
-                    .border(2.dp, Color.White.copy(alpha = 0.15f), CircleShape),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    Icons.Filled.AutoAwesome,
-                    contentDescription = null,
-                    tint = Color.White,
-                    modifier = Modifier.size(22.dp)
-                )
-            }
+            // Replit-style AI Logo
+            ReplitStyleAILogo(
+                size = 42,
+                isThinking = isProcessing
+            )
             
             Spacer(modifier = Modifier.width(12.dp))
             
@@ -595,41 +579,11 @@ fun WelcomeMessage(
             .padding(vertical = 24.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // Animated icon
-        val infiniteTransition = rememberInfiniteTransition(label = "welcome")
-        val scale by infiniteTransition.animateFloat(
-            initialValue = 0.95f,
-            targetValue = 1.05f,
-            animationSpec = infiniteRepeatable(
-                animation = tween(2000, easing = FastOutSlowInEasing),
-                repeatMode = RepeatMode.Reverse
-            ),
-            label = "scale"
+        // Replit-style AI Logo
+        ReplitStyleAILogo(
+            size = 80,
+            isThinking = false
         )
-        
-        Box(
-            modifier = Modifier
-                .size(80.dp)
-                .scale(scale)
-                .background(
-                    Brush.radialGradient(
-                        colors = listOf(
-                            Primary.copy(alpha = 0.3f),
-                            GradientCyan.copy(alpha = 0.2f),
-                            Color.Transparent
-                        )
-                    ),
-                    CircleShape
-                ),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                Icons.Filled.AutoAwesome,
-                contentDescription = null,
-                tint = Primary,
-                modifier = Modifier.size(40.dp)
-            )
-        }
         
         Spacer(modifier = Modifier.height(16.dp))
         
@@ -1053,8 +1007,6 @@ fun ModelSelectorDialog(
 
 @Composable
 fun ModernTypingIndicator() {
-    val infiniteTransition = rememberInfiniteTransition(label = "typing")
-    
     Row(
         modifier = Modifier.padding(vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -1064,34 +1016,20 @@ fun ModernTypingIndicator() {
             color = CardBackground
         ) {
             Row(
-                modifier = Modifier.padding(14.dp),
+                modifier = Modifier.padding(10.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                repeat(3) { index ->
-                    val offset by infiniteTransition.animateFloat(
-                        initialValue = 0f,
-                        targetValue = -6f,
-                        animationSpec = infiniteRepeatable(
-                            animation = tween(300, delayMillis = index * 100),
-                            repeatMode = RepeatMode.Reverse
-                        ),
-                        label = "dot$index"
-                    )
-                    Box(
-                        modifier = Modifier
-                            .offset(y = offset.dp)
-                            .size(8.dp)
-                            .background(
-                                when (index) {
-                                    0 -> Primary
-                                    1 -> GradientCyan
-                                    else -> Tertiary
-                                },
-                                CircleShape
-                            )
-                    )
-                    if (index < 2) Spacer(modifier = Modifier.width(6.dp))
-                }
+                // Replit-style AI Logo when thinking
+                ReplitStyleAILogo(
+                    size = 36,
+                    isThinking = true
+                )
+                Spacer(modifier = Modifier.width(10.dp))
+                Text(
+                    "AI đang suy nghĩ...",
+                    fontSize = 13.sp,
+                    color = OnBackgroundMuted
+                )
             }
         }
     }

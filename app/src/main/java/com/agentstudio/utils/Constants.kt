@@ -4,57 +4,32 @@ object Constants {
     // API Configuration
     const val OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
     
-    // Available Models (free or freemium)
+    // Available Models - ONLY FREE MODELS (no credit limit issues)
     val AVAILABLE_MODELS = listOf(
-        ModelOption(
-            id = "google/gemini-2.0-flash-exp:free",
-            name = "Gemini 2.0 Flash",
-            description = "Fast, efficient, great for most tasks"
-        ),
-        ModelOption(
-            id = "google/gemini-2.5-pro-exp-03-25:free",
-            name = "Gemini 2.5 Pro",
-            description = "Advanced reasoning, best for complex tasks"
-        ),
-        ModelOption(
-            id = "meta-llama/llama-3.3-70b-instruct:free",
-            name = "Llama 3.3 70B",
-            description = "Open source, powerful reasoning"
-        ),
-        ModelOption(
-            id = "deepseek/deepseek-chat-v3-0324:free",
-            name = "DeepSeek V3",
-            description = "Excellent coding assistant"
-        ),
-        ModelOption(
-            id = "deepseek/deepseek-r1:free",
-            name = "DeepSeek R1",
-            description = "Advanced reasoning with thinking"
-        ),
         ModelOption(
             id = "stepfun/step-3.5-flash:free",
             name = "Step 3.5 Flash",
-            description = "Fast and capable"
+            description = "Fast, free model with function calling"
         ),
         ModelOption(
-            id = "qwen/qwen-2.5-72b-instruct:free",
-            name = "Qwen 2.5 72B",
-            description = "Strong multilingual support"
+            id = "qwen/qwen3.6-plus-preview:free",
+            name = "Qwen 3.6 Plus",
+            description = "Powerful reasoning, multilingual"
         ),
         ModelOption(
-            id = "mistralai/mistral-small-3.1-24b-instruct:free",
-            name = "Mistral Small 3.1",
-            description = "Efficient European model"
+            id = "z-ai/glm-4.5-air:free",
+            name = "GLM 4.5 Air",
+            description = "Z.AI's free model"
         )
     )
     
     // Default model
-    const val MODEL_ID = "google/gemini-2.0-flash-exp:free"
+    const val MODEL_ID = "stepfun/step-3.5-flash:free"
     
     // App Info
     const val APP_NAME = "AgentStudio"
     const val APP_REFERER = "https://agentstudio.app"
-    const val APP_VERSION = "3.5.0"
+    const val APP_VERSION = "3.6.0"
     
     // Default Project Directory
     const val DEFAULT_PROJECT_DIR = "/storage/emulated/0/Documents/AgentStudioProject"
