@@ -5,8 +5,12 @@ import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.preferencesDataStore
+import com.agentstudio.data.local.LocalModelManager
 
 class AgentStudioApp : Application() {
+    
+    lateinit var localModelManager: LocalModelManager
+        private set
     
     companion object {
         lateinit var instance: AgentStudioApp private set
@@ -21,5 +25,6 @@ class AgentStudioApp : Application() {
     override fun onCreate() {
         super.onCreate()
         instance = this
+        localModelManager = LocalModelManager(this)
     }
 }

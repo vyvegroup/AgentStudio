@@ -123,7 +123,10 @@ data class ModelInfo(
     val id: String,
     val name: String,
     val provider: String,
-    val isFree: Boolean = false
+    val isFree: Boolean = false,
+    val isLocal: Boolean = false,
+    val requiresDownload: Boolean = false,
+    val downloadSize: String? = null
 )
 
 // Free models only
@@ -147,3 +150,17 @@ val FREE_MODELS = listOf(
         isFree = true
     )
 )
+
+// Local AI Model (runs on device)
+val LOCAL_MODEL = ModelInfo(
+    id = "local-gemma-3-4b",
+    name = "Gemma 3 4B VL",
+    provider = "Local Device",
+    isFree = true,
+    isLocal = true,
+    requiresDownload = true,
+    downloadSize = "~4.5 GB"
+)
+
+// All available models including local
+val ALL_MODELS = FREE_MODELS + LOCAL_MODEL

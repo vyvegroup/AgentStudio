@@ -12,7 +12,7 @@ fun AgentStudioContent() {
     val preferencesRepository = remember { PreferencesRepository(dataStore) }
     
     val viewModel = viewModel<com.agentstudio.ui.screens.ChatViewModel>(
-        factory = ChatViewModelFactory(preferencesRepository)
+        factory = ChatViewModelFactory(preferencesRepository, AgentStudioApp.instance)
     )
     
     ChatScreen(viewModel = viewModel)

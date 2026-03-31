@@ -6,7 +6,9 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.Refresh
@@ -19,11 +21,15 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.agentstudio.AgentStudioApp
+import com.agentstudio.data.model.ALL_MODELS
 import com.agentstudio.data.model.FREE_MODELS
+import com.agentstudio.data.model.LOCAL_MODEL
 import com.agentstudio.ui.components.*
 import kotlinx.coroutines.launch
 
@@ -36,10 +42,15 @@ fun ChatScreen(
     val selectedModel by viewModel.selectedModel.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
     val error by viewModel.error.collectAsState()
+    val isUsingLocal by viewModel.isUsingLocal.collectAsState()
+    val isLocalReady by viewModel.isLocalReady.collectAsState()
     
     var inputText by remember { mutableStateOf("") }
     var showModelSelector by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
+    
+    // Get local model manager from app instance
+    val localModelManager = remember { AgentStudioApp.instance.localModelManager }
     
     // Auto-scroll to bottom on new messages
     LaunchedEffect(messages.size) {
@@ -55,6 +66,8 @@ fun ChatScreen(
             viewModel.clearError()
         }
     }
+    
+    val selectedModelInfo = ALL_MODELS.find { it.id == selectedModel } ?: FREE_MODELS.first()
     
     Box(
         modifier = Modifier.fillMaxSize()
@@ -76,14 +89,23 @@ fun ChatScreen(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.Center
                     ) {
-                        // VenAI Logo
+                        // VenAI Logo with animation
                         Surface(
-                            modifier = Modifier.size(36.dp),
-                            shape = RoundedCornerShape(10.dp),
-                            color = Color(0xFF1e1e2e)
+                            modifier = Modifier.size(38.dp),
+                            shape = RoundedCornerShape(11.dp),
+                            color = if (isUsingLocal) Color(0xFF059669) else Color(0xFF1e1e2e)
                         ) {
                             Box(contentAlignment = Alignment.Center) {
-                                ReplitThinkingAnimation(size = 26)
+                                if (isUsingLocal) {
+                                    Icon(
+                                        Icons.Default.Storage,
+                                        contentDescription = "Local",
+                                        tint = Color.White,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                } else {
+                                    ReplitThinkingAnimation(size = 26)
+                                }
                             }
                         }
                         Spacer(modifier = Modifier.width(10.dp))
@@ -94,12 +116,22 @@ fun ChatScreen(
                                 fontSize = 18.sp,
                                 color = Color(0xFFE2E8F0)
                             )
-                            val modelName = FREE_MODELS.find { it.id == selectedModel }?.name ?: "Unknown"
-                            Text(
-                                text = modelName,
-                                fontSize = 9.sp,
-                                color = Color(0xFF8B5CF6)
-                            )
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                if (isUsingLocal) {
+                                    Icon(
+                                        Icons.Default.CloudOff,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(10.dp),
+                                        tint = Color(0xFF10B981)
+                                    )
+                                    Spacer(modifier = Modifier.width(3.dp))
+                                }
+                                Text(
+                                    text = if (isUsingLocal) "Local AI" else selectedModelInfo.name,
+                                    fontSize = 9.sp,
+                                    color = if (isUsingLocal) Color(0xFF10B981) else Color(0xFF8B5CF6)
+                                )
+                            }
                         }
                     }
                 },
@@ -108,6 +140,14 @@ fun ChatScreen(
                     titleContentColor = Color(0xFFE2E8F0)
                 ),
                 actions = {
+                    // Local AI Toggle
+                    IconButton(onClick = { viewModel.toggleLocalAI() }) {
+                        Icon(
+                            imageVector = if (isUsingLocal) Icons.Default.CloudOff else Icons.Default.Cloud,
+                            contentDescription = "Toggle Local AI",
+                            tint = if (isUsingLocal) Color(0xFF10B981) else Color(0xFF64748B)
+                        )
+                    }
                     IconButton(onClick = { showModelSelector = true }) {
                         Icon(
                             imageVector = Icons.Outlined.Settings,
@@ -144,10 +184,19 @@ fun ChatScreen(
                         Surface(
                             modifier = Modifier.size(100.dp),
                             shape = RoundedCornerShape(24.dp),
-                            color = Color(0xFF1e1e2e)
+                            color = if (isUsingLocal) Color(0xFF059669) else Color(0xFF1e1e2e)
                         ) {
                             Box(contentAlignment = Alignment.Center) {
-                                ReplitThinkingAnimation(size = 70)
+                                if (isUsingLocal) {
+                                    Icon(
+                                        Icons.Default.Storage,
+                                        contentDescription = "Local",
+                                        tint = Color.White,
+                                        modifier = Modifier.size(50.dp)
+                                    )
+                                } else {
+                                    ReplitThinkingAnimation(size = 70)
+                                }
                             }
                         }
                         
@@ -163,12 +212,40 @@ fun ChatScreen(
                         Spacer(modifier = Modifier.height(8.dp))
                         
                         Text(
-                            text = "Trợ lý AI thông minh\nsẵn sàng hỗ trợ bạn",
+                            text = if (isUsingLocal) "AI chạy offline trên thiết bị của bạn"
+                                   else "Trợ lý AI thông minh\nsẵn sàng hỗ trợ bạn",
                             fontSize = 14.sp,
                             color = Color(0xFF94A3B8),
                             textAlign = TextAlign.Center,
                             lineHeight = 22.sp
                         )
+                        
+                        // Local AI status indicator
+                        if (isUsingLocal && !isLocalReady) {
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = Color(0xFFF59E0B).copy(alpha = 0.15f)
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        Icons.Default.Info,
+                                        contentDescription = null,
+                                        tint = Color(0xFFF59E0B),
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = "Cần tải model trước khi dùng",
+                                        color = Color(0xFFF59E0B),
+                                        fontSize = 12.sp
+                                    )
+                                }
+                            }
+                        }
                         
                         Spacer(modifier = Modifier.height(36.dp))
                         
@@ -186,14 +263,16 @@ fun ChatScreen(
                                 QuickChip(
                                     text = "Tìm kiếm web",
                                     icon = Icons.Default.Search,
-                                    onClick = { viewModel.sendMessage("Tìm kiếm tin tức AI mới nhất") }
+                                    onClick = { viewModel.sendMessage("Tìm kiếm tin tức AI mới nhất") },
+                                    enabled = !isUsingLocal
                                 )
                             }
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 QuickChip(
                                     text = "Thời tiết",
                                     icon = Icons.Default.WbSunny,
-                                    onClick = { viewModel.sendMessage("Thời tiết hôm nay thế nào?") }
+                                    onClick = { viewModel.sendMessage("Thời tiết hôm nay thế nào?") },
+                                    enabled = !isUsingLocal
                                 )
                                 QuickChip(
                                     text = "Viết code",
@@ -215,7 +294,7 @@ fun ChatScreen(
                         
                         if (isLoading && messages.lastOrNull()?.isStreaming != true) {
                             item {
-                                TypingIndicator()
+                                TypingIndicator(isLocal = isUsingLocal)
                             }
                         }
                     }
@@ -272,54 +351,34 @@ fun ChatScreen(
                         inputText = ""
                     }
                 },
-                isLoading = isLoading
+                isLoading = isLoading,
+                isLocal = isUsingLocal
             )
         }
     }
     
     // Model selector sheet
     if (showModelSelector) {
-        ModalBottomSheet(
-            onDismissRequest = { showModelSelector = false },
-            containerColor = Color(0xFF1a1a2e)
-        ) {
-            Column(
-                modifier = Modifier
-                    .padding(16.dp)
-                    .navigationBarsPadding()
-            ) {
-                Text(
-                    text = "Chọn Model",
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color(0xFFE2E8F0),
-                    modifier = Modifier.padding(bottom = 16.dp)
-                )
-                
-                FREE_MODELS.forEach { model ->
-                    ModelOption(
-                        model = model,
-                        isSelected = model.id == selectedModel,
-                        onClick = {
-                            viewModel.setModel(model.id)
-                            showModelSelector = false
-                        }
-                    )
-                }
-                
-                Spacer(modifier = Modifier.height(24.dp))
-            }
-        }
+        ModelSelectionSheet(
+            selectedModel = selectedModel,
+            onModelSelected = { modelId ->
+                viewModel.setModel(modelId)
+                showModelSelector = false
+            },
+            onDismiss = { showModelSelector = false },
+            localModelManager = localModelManager
+        )
     }
 }
 
-// Floating ChatGPT-style input bar
+// Modern floating chat input - ChatGPT style
 @Composable
 private fun FloatingChatInput(
     inputText: String,
     onInputChange: (String) -> Unit,
     onSend: () -> Unit,
-    isLoading: Boolean
+    isLoading: Boolean,
+    isLocal: Boolean = false
 ) {
     Surface(
         modifier = Modifier
@@ -327,74 +386,86 @@ private fun FloatingChatInput(
             .padding(horizontal = 12.dp, vertical = 8.dp),
         shape = RoundedCornerShape(28.dp),
         color = Color(0xFF1a1a2e).copy(alpha = 0.95f),
-        shadowElevation = 8.dp
+        shadowElevation = 12.dp
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 8.dp, vertical = 6.dp)
+                .padding(horizontal = 6.dp, vertical = 6.dp)
                 .navigationBarsPadding(),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            OutlinedTextField(
-                value = inputText,
-                onValueChange = onInputChange,
-                modifier = Modifier.weight(1f),
-                placeholder = {
+            // Input field
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(horizontal = 12.dp)
+            ) {
+                if (inputText.isEmpty()) {
                     Text(
-                        "Nhắn tin cho VenAI...",
+                        text = if (isLocal) "Nhắn tin cho Local AI..." else "Nhắn tin cho VenAI...",
                         color = Color(0xFF64748B),
-                        fontSize = 14.sp
+                        fontSize = 15.sp
                     )
-                },
-                shape = RoundedCornerShape(24.dp),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = Color.Transparent,
-                    unfocusedBorderColor = Color.Transparent,
-                    focusedContainerColor = Color(0x15000000),
-                    unfocusedContainerColor = Color(0x10000000),
-                    focusedTextColor = Color(0xFFE2E8F0),
-                    unfocusedTextColor = Color(0xFFE2E8F0),
-                    cursorColor = Color(0xFF8B5CF6)
-                ),
-                maxLines = 5,
-                minLines = 1,
-                trailingIcon = {
-                    IconButton(
-                        onClick = onSend,
-                        enabled = inputText.isNotBlank() && !isLoading,
-                        modifier = Modifier
-                            .size(36.dp)
-                            .clip(RoundedCornerShape(50))
-                            .background(
-                                if (inputText.isNotBlank() && !isLoading)
-                                    Brush.radialGradient(
-                                        colors = listOf(
-                                            Color(0xFFf26207),
-                                            Color(0xFFe2488b)
-                                        )
-                                    )
-                                else
-                                    Brush.radialGradient(
-                                        colors = listOf(
-                                            Color(0xFF334155),
-                                            Color(0xFF1e293b)
-                                        )
-                                    )
-                            )
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.ArrowUpward,
-                            contentDescription = "Send",
-                            tint = if (inputText.isNotBlank() && !isLoading)
-                                Color.White
-                            else
-                                Color(0xFF64748B),
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
                 }
-            )
+                BasicTextField(
+                    value = inputText,
+                    onValueChange = onInputChange,
+                    modifier = Modifier.fillMaxWidth(),
+                    textStyle = androidx.compose.ui.text.TextStyle(
+                        color = Color(0xFFE2E8F0),
+                        fontSize = 15.sp,
+                        lineHeight = 22.sp
+                    ),
+                    cursorBrush = SolidColor(
+                        if (isLocal) Color(0xFF10B981) else Color(0xFF8B5CF6)
+                    ),
+                    maxLines = 5,
+                    minLines = 1,
+                    decorationBox = { innerTextField ->
+                        innerTextField()
+                    }
+                )
+            }
+            
+            // Send button
+            Box(
+                modifier = Modifier
+                    .size(42.dp)
+                    .clip(CircleShape)
+                    .background(
+                        if (inputText.isNotBlank() && !isLoading) {
+                            if (isLocal) {
+                                Brush.linearGradient(
+                                    colors = listOf(Color(0xFF059669), Color(0xFF10B981))
+                                )
+                            } else {
+                                Brush.linearGradient(
+                                    colors = listOf(Color(0xFFf26207), Color(0xFFe2488b))
+                                )
+                            }
+                        } else {
+                            SolidColor(Color(0xFF334155))
+                        }
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                IconButton(
+                    onClick = onSend,
+                    enabled = inputText.isNotBlank() && !isLoading,
+                    modifier = Modifier.size(42.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.ArrowUpward,
+                        contentDescription = "Send",
+                        tint = if (inputText.isNotBlank() && !isLoading)
+                            Color.White
+                        else
+                            Color(0xFF64748B),
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            }
         }
     }
 }
@@ -403,16 +474,18 @@ private fun FloatingChatInput(
 private fun QuickChip(
     text: String,
     icon: androidx.compose.ui.graphics.vector.ImageVector,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    enabled: Boolean = true
 ) {
     Surface(
         onClick = onClick,
         shape = RoundedCornerShape(20.dp),
-        color = Color(0x20000000),
+        color = if (enabled) Color(0x20000000) else Color(0x10000000),
         border = androidx.compose.foundation.BorderStroke(
             width = 1.dp,
-            color = Color(0xFF8B5CF6).copy(alpha = 0.3f)
-        )
+            color = if (enabled) Color(0xFF8B5CF6).copy(alpha = 0.3f) else Color(0xFF64748B).copy(alpha = 0.2f)
+        ),
+        enabled = enabled
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
@@ -422,70 +495,22 @@ private fun QuickChip(
                 imageVector = icon,
                 contentDescription = null,
                 modifier = Modifier.size(14.dp),
-                tint = Color(0xFF8B5CF6)
+                tint = if (enabled) Color(0xFF8B5CF6) else Color(0xFF64748B)
             )
             Spacer(modifier = Modifier.width(6.dp))
             Text(
                 text = text,
-                color = Color(0xFFE2E8F0),
+                color = if (enabled) Color(0xFFE2E8F0) else Color(0xFF64748B),
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Medium
             )
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun ModelOption(
-    model: com.agentstudio.data.model.ModelInfo,
-    isSelected: Boolean,
-    onClick: () -> Unit
-) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 4.dp),
-        onClick = onClick,
-        colors = CardDefaults.cardColors(
-            containerColor = if (isSelected)
-                Color(0xFF3730A3)
-            else
-                Color(0xFF1e1e2e)
-        )
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = model.name,
-                    fontWeight = FontWeight.Medium,
-                    color = Color(0xFFE2E8F0)
-                )
-                Text(
-                    text = model.provider,
-                    fontSize = 12.sp,
-                    color = Color(0xFF64748B)
-                )
-            }
-            if (model.isFree) {
-                Text(
-                    text = "FREE",
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color(0xFF10B981)
-                )
-            }
-            if (isSelected) {
-                Spacer(modifier = Modifier.width(8.dp))
+            if (!enabled) {
+                Spacer(modifier = Modifier.width(4.dp))
                 Icon(
-                    imageVector = Icons.Default.Check,
-                    contentDescription = "Selected",
-                    tint = Color(0xFF8B5CF6)
+                    Icons.Default.CloudOff,
+                    contentDescription = null,
+                    modifier = Modifier.size(10.dp),
+                    tint = Color(0xFF64748B)
                 )
             }
         }

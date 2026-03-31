@@ -1,12 +1,17 @@
 package com.agentstudio.ui.screens
 
+import android.app.Application
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.agentstudio.BuildConfig
 import com.agentstudio.data.agent.AgentExecutor
 import com.agentstudio.data.api.OpenRouterApi
+import com.agentstudio.data.local.LocalLLMEngine
+import com.agentstudio.data.local.LocalModelManager
+import com.agentstudio.data.local.LocalModels
 import com.agentstudio.data.model.ChatMessage
 import com.agentstudio.data.model.FREE_MODELS
+import com.agentstudio.data.model.LOCAL_MODEL
 import com.agentstudio.data.repository.PreferencesRepository
 import com.agentstudio.ui.components.*
 import kotlinx.coroutines.delay
@@ -15,7 +20,8 @@ import kotlinx.coroutines.launch
 import java.util.*
 
 class ChatViewModel(
-    private val preferencesRepository: PreferencesRepository
+    private val preferencesRepository: PreferencesRepository,
+    private val application: Application? = null
 ) : ViewModel() {
     
     companion object {
@@ -37,11 +43,33 @@ class ChatViewModel(
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
     
+    // Local AI states
+    private val _isUsingLocal = MutableStateFlow(false)
+    val isUsingLocal: StateFlow<Boolean> = _isUsingLocal.asStateFlow()
+    
+    private val _isLocalReady = MutableStateFlow(false)
+    val isLocalReady: StateFlow<Boolean> = _isLocalReady.asStateFlow()
+    
     private val conversationHistory = mutableListOf<ChatMessage>()
     private var apiKey: String = DEFAULT_API_KEY
     
+    // Local LLM Engine
+    private var localLLMEngine: LocalLLMEngine? = null
+    private var localModelManager: LocalModelManager? = null
+    
     init {
         apiKey = DEFAULT_API_KEY
+        
+        application?.let { app ->
+            localLLMEngine = LocalLLMEngine.getInstance(app)
+            localModelManager = LocalModelManager(app)
+            
+            // Check if local model is downloaded
+            viewModelScope.launch {
+                val isDownloaded = localModelManager?.isModelDownloaded(LocalModels.GEMMA_4B) ?: false
+                _isLocalReady.value = isDownloaded
+            }
+        }
         
         viewModelScope.launch {
             preferencesRepository.selectedModel.collect { model ->
@@ -64,6 +92,22 @@ class ChatViewModel(
         }
     }
     
+    fun toggleLocalAI() {
+        if (!_isLocalReady.value && !_isUsingLocal.value) {
+            // Show message that model needs to be downloaded
+            _error.value = "Cần tải model Local AI trước. Vào Settings để tải."
+            return
+        }
+        _isUsingLocal.value = !_isUsingLocal.value
+    }
+    
+    fun checkLocalModelStatus() {
+        viewModelScope.launch {
+            val isDownloaded = localModelManager?.isModelDownloaded(LocalModels.GEMMA_4B) ?: false
+            _isLocalReady.value = isDownloaded
+        }
+    }
+    
     fun clearMessages() {
         _messages.value = emptyList()
         conversationHistory.clear()
@@ -72,6 +116,12 @@ class ChatViewModel(
     fun sendMessage(content: String) {
         if (content.isBlank()) return
         if (_isLoading.value) return
+        
+        // Check if using local AI
+        if (_isUsingLocal.value) {
+            sendLocalMessage(content)
+            return
+        }
         
         viewModelScope.launch {
             _isLoading.value = true
@@ -319,7 +369,7 @@ class ChatViewModel(
                                             blocks = listOf(ContentBlock.TextBlock("⏳ Đợi API... ($retryCount/$MAX_RETRIES)")),
                                             isUser = false,
                                             isStreaming = true
-                                        )
+                                                        )
                                     } else msg
                                 }
                             }
@@ -342,6 +392,121 @@ class ChatViewModel(
                         }
                     }
                     break
+                }
+            }
+            
+            _isLoading.value = false
+        }
+    }
+    
+    private fun sendLocalMessage(content: String) {
+        viewModelScope.launch {
+            _isLoading.value = true
+            _error.value = null
+            
+            // Add user message
+            val userMessageId = UUID.randomUUID().toString()
+            _messages.update { current ->
+                current + ChatMessageUi(
+                    id = userMessageId,
+                    blocks = listOf(ContentBlock.TextBlock(content)),
+                    isUser = true
+                )
+            }
+            
+            // Add placeholder for AI response
+            val aiMessageId = UUID.randomUUID().toString()
+            _messages.update { current ->
+                current + ChatMessageUi(
+                    id = aiMessageId,
+                    blocks = emptyList(),
+                    isUser = false,
+                    isStreaming = true,
+                    isLocal = true
+                )
+            }
+            
+            try {
+                val engine = localLLMEngine
+                if (engine == null || !engine.isReady()) {
+                    // Try to load model
+                    val modelPath = localModelManager?.getLocalModelPath(LocalModels.GEMMA_4B)
+                    if (modelPath != null) {
+                        engine?.loadModel(modelPath)
+                    } else {
+                        _error.value = "Model chưa được tải. Vào Settings để tải model."
+                        _messages.update { current ->
+                            current.map { msg ->
+                                if (msg.id == aiMessageId) {
+                                    ChatMessageUi(
+                                        id = msg.id,
+                                        blocks = listOf(ContentBlock.TextBlock("⚠️ Model chưa được tải. Vào Settings để tải model Local AI.")),
+                                        isUser = false,
+                                        isStreaming = false,
+                                        isLocal = true
+                                    )
+                                } else msg
+                            }
+                        }
+                        _isLoading.value = false
+                        return@launch
+                    }
+                }
+                
+                // Build prompt from conversation
+                val messages = mutableListOf<Pair<String, String>>()
+                messages.add("system" to "Bạn là VenAI - trợ lý AI thông minh chạy trên thiết bị. Trả lời ngắn gọn, hữu ích bằng tiếng Việt.")
+                messages.add("user" to content)
+                
+                val responseText = StringBuilder()
+                
+                engine?.chat(messages)?.collect { token ->
+                    responseText.append(token)
+                    
+                    _messages.update { current ->
+                        current.map { msg ->
+                            if (msg.id == aiMessageId) {
+                                ChatMessageUi(
+                                    id = msg.id,
+                                    blocks = listOf(ContentBlock.TextBlock(responseText.toString())),
+                                    isUser = false,
+                                    isStreaming = true,
+                                    isLocal = true
+                                )
+                            } else msg
+                        }
+                    }
+                }
+                
+                // Mark as complete
+                _messages.update { current ->
+                    current.map { msg ->
+                        if (msg.id == aiMessageId) {
+                            ChatMessageUi(
+                                id = msg.id,
+                                blocks = listOf(ContentBlock.TextBlock(responseText.toString())),
+                                isUser = false,
+                                isStreaming = false,
+                                isLocal = true
+                            )
+                        } else msg
+                    }
+                }
+                
+            } catch (e: Exception) {
+                _error.value = e.message
+                _messages.update { current ->
+                    current.map { msg ->
+                        if (msg.id == aiMessageId) {
+                            ChatMessageUi(
+                                id = msg.id,
+                                blocks = listOf(ContentBlock.TextBlock("💫 Lỗi Local AI: ${e.message}")),
+                                isUser = false,
+                                isStreaming = false,
+                                isLocal = true
+                            )
+                        } else msg
+                    }
                 }
             }
             
