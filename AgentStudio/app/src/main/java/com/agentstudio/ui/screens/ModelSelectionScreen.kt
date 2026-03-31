@@ -3,7 +3,6 @@ package com.agentstudio.ui.screens
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
@@ -44,8 +43,8 @@ fun ModelSelectionSheet(
 ) {
     val scope = rememberCoroutineScope()
     
-    // Safe handling of localModelManager
-    val manager = localModelManager ?: AgentStudioApp.instance.localModelManager
+    // Get manager safely
+    val manager = remember { localModelManager ?: try { AgentStudioApp.instance.localModelManager } catch (e: Exception) { null } }
     
     // Download states
     var isDownloading by remember { mutableStateOf(false) }
@@ -58,13 +57,21 @@ fun ModelSelectionSheet(
     
     // Refresh download status
     LaunchedEffect(Unit) {
-        isLocalDownloaded = manager?.isModelDownloaded(LocalModels.GEMMA_4B) ?: false
+        isLocalDownloaded = try {
+            manager?.isModelDownloaded(LocalModels.GEMMA_4B) ?: false
+        } catch (e: Exception) {
+            false
+        }
     }
     
     // Also refresh when dialog closes
     LaunchedEffect(isDownloading) {
         if (!isDownloading) {
-            isLocalDownloaded = manager?.isModelDownloaded(LocalModels.GEMMA_4B) ?: false
+            isLocalDownloaded = try {
+                manager?.isModelDownloaded(LocalModels.GEMMA_4B) ?: false
+            } catch (e: Exception) {
+                false
+            }
         }
     }
 
@@ -219,27 +226,39 @@ fun ModelSelectionSheet(
             },
             onStartDownload = {
                 scope.launch {
-                    isDownloading = true
-                    downloadProgress = 0f
-                    downloadError = null
-                    
-                    manager?.downloadModel(LocalModels.GEMMA_4B)?.collect { progress ->
-                        when (progress) {
-                            is LocalModelManager.DownloadProgress.Progress -> {
-                                downloadProgress = progress.progress
-                            }
-                            is LocalModelManager.DownloadProgress.Completed -> {
-                                isDownloading = false
-                                downloadProgress = 1f
-                                isLocalDownloaded = true
-                                kotlinx.coroutines.delay(500)
-                                showDownloadDialog = false
-                            }
-                            is LocalModelManager.DownloadProgress.Error -> {
-                                isDownloading = false
-                                downloadError = progress.message
+                    try {
+                        isDownloading = true
+                        downloadProgress = 0f
+                        downloadError = null
+                        
+                        val mgr = manager
+                        if (mgr == null) {
+                            isDownloading = false
+                            downloadError = "LocalModelManager không khả dụng"
+                            return@launch
+                        }
+                        
+                        mgr.downloadModel(LocalModels.GEMMA_4B).collect { progress ->
+                            when (progress) {
+                                is LocalModelManager.DownloadProgress.Progress -> {
+                                    downloadProgress = progress.progress
+                                }
+                                is LocalModelManager.DownloadProgress.Completed -> {
+                                    isDownloading = false
+                                    downloadProgress = 1f
+                                    isLocalDownloaded = true
+                                    kotlinx.coroutines.delay(500)
+                                    showDownloadDialog = false
+                                }
+                                is LocalModelManager.DownloadProgress.Error -> {
+                                    isDownloading = false
+                                    downloadError = progress.message
+                                }
                             }
                         }
+                    } catch (e: Exception) {
+                        isDownloading = false
+                        downloadError = e.message ?: "Lỗi không xác định"
                     }
                 }
             }

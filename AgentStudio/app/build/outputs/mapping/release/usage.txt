@@ -33438,9 +33438,6 @@ kotlinx.coroutines.flow.CancellableFlowImpl$collect$2$emit$1
 kotlinx.coroutines.flow.CancellableFlowImpl$collect$2
 kotlinx.coroutines.flow.CancellableFlowImpl
 kotlinx.coroutines.flow.ChannelAsFlow
-kotlinx.coroutines.flow.ChannelFlowBuilder:
-    public synthetic void <init>(kotlin.jvm.functions.Function2,kotlin.coroutines.CoroutineContext,int,kotlinx.coroutines.channels.BufferOverflow,int,kotlin.jvm.internal.DefaultConstructorMarker)
-    protected kotlinx.coroutines.flow.internal.ChannelFlow create(kotlin.coroutines.CoroutineContext,int,kotlinx.coroutines.channels.BufferOverflow)
 kotlinx.coroutines.flow.EmptyFlow
 kotlinx.coroutines.flow.FlowKt:
     public static final java.lang.String DEFAULT_CONCURRENCY_PROPERTY_NAME
@@ -33462,7 +33459,6 @@ kotlinx.coroutines.flow.FlowKt:
     public static final kotlinx.coroutines.flow.Flow cancellable(kotlinx.coroutines.flow.Flow)
     public static final kotlinx.coroutines.flow.Flow catch(kotlinx.coroutines.flow.Flow,kotlin.jvm.functions.Function3)
     public static final java.lang.Object catchImpl(kotlinx.coroutines.flow.Flow,kotlinx.coroutines.flow.FlowCollector,kotlin.coroutines.Continuation)
-    public static final kotlinx.coroutines.flow.Flow channelFlow(kotlin.jvm.functions.Function2)
     public static final synthetic java.lang.Object collect(kotlinx.coroutines.flow.Flow,kotlin.jvm.functions.Function2,kotlin.coroutines.Continuation)
     public static final java.lang.Object collectIndexed(kotlinx.coroutines.flow.Flow,kotlin.jvm.functions.Function3,kotlin.coroutines.Continuation)
     public static final java.lang.Object collectWhile(kotlinx.coroutines.flow.Flow,kotlin.jvm.functions.Function2,kotlin.coroutines.Continuation)
@@ -33620,7 +33616,6 @@ kotlinx.coroutines.flow.FlowKt__BuildersKt:
     public static final kotlinx.coroutines.flow.Flow asFlow(int[])
     public static final kotlinx.coroutines.flow.Flow asFlow(long[])
     public static final kotlinx.coroutines.flow.Flow asFlow(java.lang.Object[])
-    public static final kotlinx.coroutines.flow.Flow channelFlow(kotlin.jvm.functions.Function2)
     public static final kotlinx.coroutines.flow.Flow emptyFlow()
     public static final varargs kotlinx.coroutines.flow.Flow flowOf(java.lang.Object[])
 kotlinx.coroutines.flow.FlowKt__ChannelsKt$asFlow$$inlined$unsafeFlow$1
@@ -47006,16 +47001,16 @@ androidx.datastore.preferences.core.PreferencesFactory:
     public static final java.lang.Object yield(androidx.compose.ui.text.font.AsyncFontListLoader$load$1)
 androidx.datastore.preferences.core.PreferencesKeys$$InternalSyntheticThrowCCEIfNotNull$11$d2959ee05984ab6f77ea5e4ecd4e57be011ac5d7781c440624fb245707565d6b$0
 androidx.datastore.preferences.core.PreferencesKeys:
-    public static final boolean ModelSelectionSheet$lambda$1(androidx.compose.runtime.MutableState)
-    public static final float ModelSelectionSheet$lambda$4(androidx.compose.runtime.MutableState)
+    public static final boolean ModelSelectionSheet$lambda$2(androidx.compose.runtime.MutableState)
+    public static final float ModelSelectionSheet$lambda$5(androidx.compose.runtime.MutableState)
     public static kotlinx.coroutines.SupervisorJobImpl SupervisorJob$default()
     public static final float access$MistyBackground$lambda$0(androidx.compose.runtime.State)
-    public static final boolean access$ModelSelectionSheet$lambda$1(androidx.compose.runtime.MutableState)
-    public static final void access$ModelSelectionSheet$lambda$11(androidx.compose.runtime.MutableState,boolean)
-    public static final boolean access$ModelSelectionSheet$lambda$13(androidx.compose.runtime.MutableState)
-    public static final void access$ModelSelectionSheet$lambda$14(androidx.compose.runtime.MutableState,boolean)
-    public static final void access$ModelSelectionSheet$lambda$2(androidx.compose.runtime.MutableState,boolean)
-    public static final void access$ModelSelectionSheet$lambda$5(androidx.compose.runtime.MutableState,float)
+    public static final void access$ModelSelectionSheet$lambda$12(androidx.compose.runtime.MutableState,boolean)
+    public static final boolean access$ModelSelectionSheet$lambda$14(androidx.compose.runtime.MutableState)
+    public static final void access$ModelSelectionSheet$lambda$15(androidx.compose.runtime.MutableState,boolean)
+    public static final boolean access$ModelSelectionSheet$lambda$2(androidx.compose.runtime.MutableState)
+    public static final void access$ModelSelectionSheet$lambda$3(androidx.compose.runtime.MutableState,boolean)
+    public static final void access$ModelSelectionSheet$lambda$6(androidx.compose.runtime.MutableState,float)
     public static synthetic void cancel$default(kotlinx.coroutines.Job)
     public static final androidx.lifecycle.viewmodel.CreationExtras defaultCreationExtras(androidx.lifecycle.ViewModelStoreOwner)
     public static final long durationOfNanos(long)
@@ -48324,16 +48319,15 @@ com.agentstudio.data.local.LocalModelManager$DownloadProgress:
 com.agentstudio.data.local.LocalModelManager$DownloadState:
     static void <clinit>()
 com.agentstudio.data.local.LocalModelManager$downloadModel$2$2:
+    public int label
     public final java.lang.Object invoke$2()
 com.agentstudio.data.local.LocalModelManager$downloadModel$2:
-    public final java.lang.Object invoke$14()
+    public final java.lang.Object invoke$39()
 com.agentstudio.data.local.LocalModelManager:
     public static final int $stable
     public final kotlinx.coroutines.flow.StateFlow downloadState
     static void <clinit>()
     public static java.lang.Object downloadModel()
-    public final java.io.File getModelsDir()
-    public final boolean isModelDownloaded(com.agentstudio.data.local.LocalModel)
 com.agentstudio.data.local.LocalModels:
     public static final int $stable
     public static final java.util.List ALL
@@ -49595,9 +49589,6 @@ kotlinx.coroutines.channels.ProducerCoroutine:
 kotlinx.coroutines.channels.ReceiveCatching
 kotlinx.coroutines.channels.SendChannel$DefaultImpls
 kotlinx.coroutines.flow.AbstractFlow
-kotlinx.coroutines.flow.CallbackFlowBuilder:
-    public static java.lang.Object collectTo$kotlinx$coroutines$flow$ChannelFlowBuilder()
-kotlinx.coroutines.flow.ChannelFlowBuilder
 kotlinx.coroutines.flow.DistinctFlowImpl$collect$2
 kotlinx.coroutines.flow.FlowKt
 kotlinx.coroutines.flow.FlowKt__BuildersKt$flowOf$$inlined$unsafeFlow$2:
