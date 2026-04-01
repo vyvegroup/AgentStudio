@@ -31,6 +31,7 @@ set(GGML_OPENBLAS OFF CACHE BOOL "" FORCE)
 set(GGML_METAL OFF CACHE BOOL "" FORCE)
 set(LLAMA_CURL OFF CACHE BOOL "" FORCE)
 set(BUILD_SHARED_LIBS ON CACHE BOOL "" FORCE)
+set(LLAMA_BUILD_COMMON OFF CACHE BOOL "" FORCE)
 
 # Add llama.cpp subdirectory
 add_subdirectory(${LLAMA_DIR} llama_build EXCLUDE_FROM_ALL)
@@ -42,11 +43,12 @@ add_library(llama-android SHARED llama-android.cpp)
 target_include_directories(llama-android PRIVATE
     ${LLAMA_DIR}
     ${LLAMA_DIR}/common
+    ${LLAMA_DIR}/src
     ${CMAKE_SOURCE_DIR}
 )
 
-# Link with llama.cpp and common
-target_link_libraries(llama-android llama common log android)
+# Link only with llama (not common)
+target_link_libraries(llama-android llama log android)
 
 # Define for Android
 target_compile_definitions(llama-android PRIVATE GGML_USE_CPU ANDROID LLAMA_CPP_AVAILABLE)

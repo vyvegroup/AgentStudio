@@ -9,11 +9,10 @@
 #include <iomanip>
 #include <cmath>
 #include <unistd.h>
+#include <random>
 
-// llama.cpp headers
+// llama.cpp headers - only use core API
 #include "llama.h"
-#include "common.h"
-#include "sampling.h"
 
 #define LOG_TAG "llama-android"
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
@@ -37,7 +36,6 @@ constexpr float DEFAULT_TEMP = 0.7f;
 struct ModelContext {
     llama_model* model = nullptr;
     llama_context* ctx = nullptr;
-    common_sampler* sampler = nullptr;
     std::string modelPath;
     int nCtx = DEFAULT_CONTEXT_SIZE;
     int nVocab = 0;
@@ -45,6 +43,98 @@ struct ModelContext {
 };
 
 static ModelContext* g_context = nullptr;
+
+// Simple tokenization using llama API
+static std::vector<llama_token> tokenize_simple(llama_context* ctx, const std::string& text, bool add_bos) {
+    std::vector<llama_token> tokens;
+    tokens.resize(text.size() + 1); // Upper bound
+    
+    int n_tokens = llama_tokenize(
+        llama_get_model(ctx),
+        text.c_str(),
+        text.size(),
+        tokens.data(),
+        tokens.size(),
+        add_bos,
+        false
+    );
+    
+    if (n_tokens > 0) {
+        tokens.resize(n_tokens);
+    } else {
+        tokens.clear();
+    }
+    
+    return tokens;
+}
+
+// Simple token to text conversion
+static std::string token_to_text(llama_context* ctx, llama_token token) {
+    std::string result;
+    result.resize(16); // Most tokens are small
+    
+    int n = llama_token_to_piece(
+        llama_get_model(ctx),
+        token,
+        result.data(),
+        result.size(),
+        0,
+        false
+    );
+    
+    if (n > 0) {
+        result.resize(n);
+    } else {
+        result.clear();
+    }
+    
+    return result;
+}
+
+// Simple sampling with temperature
+static llama_token sample_token(llama_context* ctx, float temp, uint32_t seed) {
+    // Get logits
+    float* logits = llama_get_logits(ctx);
+    int n_vocab = llama_vocab_n_tokens(llama_get_model(ctx));
+    
+    // Simple temperature sampling
+    std::vector<float> probs(n_vocab);
+    float max_logit = -1e10f;
+    
+    // Find max for numerical stability
+    for (int i = 0; i < n_vocab; i++) {
+        if (logits[i] > max_logit) {
+            max_logit = logits[i];
+        }
+    }
+    
+    // Apply temperature and compute softmax
+    float sum = 0.0f;
+    for (int i = 0; i < n_vocab; i++) {
+        probs[i] = expf((logits[i] - max_logit) / temp);
+        sum += probs[i];
+    }
+    
+    // Normalize
+    for (int i = 0; i < n_vocab; i++) {
+        probs[i] /= sum;
+    }
+    
+    // Sample using cumulative distribution
+    static std::mt19937 rng(seed);
+    std::uniform_real_distribution<float> dist(0.0f, 1.0f);
+    float r = dist(rng);
+    
+    float cumsum = 0.0f;
+    for (int i = 0; i < n_vocab; i++) {
+        cumsum += probs[i];
+        if (r < cumsum) {
+            return i;
+        }
+    }
+    
+    return n_vocab - 1;
+}
 
 extern "C" {
 
@@ -79,7 +169,7 @@ Java_com_agentstudio_data_local_LlamaJNI_nativeLoadModel(JNIEnv* env, jobject th
     // Model parameters
     llama_model_params model_params = llama_model_default_params();
 
-    // Load model - use new API
+    // Load model
     llama_model* model = llama_model_load_from_file(pathStr.c_str(), model_params);
     if (!model) {
         LOGE("Failed to load model from %s", pathStr.c_str());
@@ -98,7 +188,7 @@ Java_com_agentstudio_data_local_LlamaJNI_nativeLoadModel(JNIEnv* env, jobject th
     ctx_params.n_threads = nThreads;
     ctx_params.n_threads_batch = nThreads;
 
-    // Create context - use new API
+    // Create context
     llama_context* ctx = llama_init_from_model(model, ctx_params);
     if (!ctx) {
         LOGE("Failed to create context");
@@ -106,16 +196,10 @@ Java_com_agentstudio_data_local_LlamaJNI_nativeLoadModel(JNIEnv* env, jobject th
         return 0;
     }
 
-    // Create sampler
-    common_params_sampling sparams;
-    sparams.temp = DEFAULT_TEMP;
-    common_sampler* sampler = common_sampler_init(model, sparams);
-
     // Create context wrapper
     ModelContext* mc = new ModelContext();
     mc->model = model;
     mc->ctx = ctx;
-    mc->sampler = sampler;
     mc->modelPath = pathStr;
     mc->nCtx = ctx_params.n_ctx;
     mc->nVocab = llama_vocab_n_tokens(llama_model_get_vocab(model));
@@ -135,9 +219,6 @@ Java_com_agentstudio_data_local_LlamaJNI_nativeFreeModel(JNIEnv* env, jobject th
 
     ModelContext* mc = reinterpret_cast<ModelContext*>(contextPtr);
     if (mc) {
-        if (mc->sampler) {
-            common_sampler_free(mc->sampler);
-        }
         if (mc->ctx) {
             llama_free(mc->ctx);
         }
@@ -199,31 +280,18 @@ Java_com_agentstudio_data_local_LlamaJNI_nativeGenerate(
 
     LOGD("Generating with prompt length: %zu, maxTokens: %d", promptStr.length(), maxTokens);
 
-    // Reset sampler with new parameters
-    if (mc->sampler) {
-        common_sampler_free(mc->sampler);
-    }
-    common_params_sampling sparams;
-    sparams.temp = temperature;
-    sparams.top_p = topP;
-    sparams.top_k = topK;
-    sparams.seed = (seed < 0) ? (uint32_t)time(nullptr) : (uint32_t)seed;
-    mc->sampler = common_sampler_init(mc->model, sparams);
-
     // Tokenize prompt
-    bool add_bos = true;
-    std::vector<llama_token> tokens = common_tokenize(mc->ctx, promptStr, add_bos, true);
+    std::vector<llama_token> tokens = tokenize_simple(mc->ctx, promptStr, true);
 
     LOGD("Tokenized to %zu tokens", tokens.size());
 
-    // Clear KV cache - use new API
+    // Clear KV cache
     llama_memory_clear(llama_get_memory(mc->ctx), false);
 
-    // Decode prompt in batches using new batch API
+    // Decode prompt in batches
     for (size_t i = 0; i < tokens.size(); i += BATCH_SIZE) {
         size_t batch_size = std::min(tokens.size() - i, (size_t)BATCH_SIZE);
-
-        // Use new batch API with 2 arguments
+        
         llama_batch batch = llama_batch_get_one(tokens.data() + i, batch_size);
 
         if (llama_decode(mc->ctx, batch) != 0) {
@@ -232,14 +300,17 @@ Java_com_agentstudio_data_local_LlamaJNI_nativeGenerate(
         }
     }
 
+    // Use provided seed or generate one
+    uint32_t useed = (seed < 0) ? (uint32_t)time(nullptr) : (uint32_t)seed;
+    float temp = (temperature > 0.0f) ? temperature : DEFAULT_TEMP;
+
     // Generation
     std::string result;
     int current_pos = tokens.size();
 
     for (int i = 0; i < maxTokens; i++) {
         // Sample next token
-        llama_token nextToken = common_sampler_sample(mc->sampler, mc->ctx, -1);
-        common_sampler_accept(mc->sampler, nextToken, true);
+        llama_token nextToken = sample_token(mc->ctx, temp, useed + i);
 
         // Check for EOS
         if (llama_vocab_is_eog(llama_model_get_vocab(mc->model), nextToken)) {
@@ -248,7 +319,7 @@ Java_com_agentstudio_data_local_LlamaJNI_nativeGenerate(
         }
 
         // Convert to text
-        std::string tokenStr = common_token_to_piece(mc->ctx, nextToken);
+        std::string tokenStr = token_to_text(mc->ctx, nextToken);
         result += tokenStr;
 
         // Decode for next iteration
