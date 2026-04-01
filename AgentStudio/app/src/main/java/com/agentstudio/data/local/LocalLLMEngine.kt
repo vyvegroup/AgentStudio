@@ -1,6 +1,7 @@
 package com.agentstudio.data.local
 
 import android.content.Context
+import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.withContext
@@ -9,15 +10,43 @@ import java.io.File
 /**
  * Local LLM Inference Engine
  * 
- * This is a simplified interface for local model inference.
- * For production use, integrate with llama.cpp Android bindings or similar.
+ * This engine provides a placeholder for local model inference.
+ * For real GGUF inference, integrate llama.cpp Android bindings.
  * 
- * To enable real inference:
- * 1. Add llama.cpp Android library (libllama.so)
- * 2. Implement native JNI calls
- * 3. Use this engine as the interface layer
+ * Integration options:
+ * 1. llama.cpp Android - Full GGUF support, requires NDK
+ * 2. MLC LLM - Pre-built Android library, some GGUF support
+ * 3. Google MediaPipe - Limited model support
  */
 class LocalLLMEngine(private val context: Context) {
+    
+    companion object {
+        private const val TAG = "LocalLLMEngine"
+        
+        // Check if native library is available
+        private var nativeLibraryLoaded = false
+        
+        init {
+            try {
+                System.loadLibrary("llama")
+                nativeLibraryLoaded = true
+                Log.d(TAG, "llama.cpp native library loaded successfully")
+            } catch (e: UnsatisfiedLinkError) {
+                Log.d(TAG, "llama.cpp native library not available - running in demo mode")
+                nativeLibraryLoaded = false
+            }
+        }
+        
+        private var instance: LocalLLMEngine? = null
+        
+        fun getInstance(context: Context): LocalLLMEngine {
+            return instance ?: synchronized(this) {
+                instance ?: LocalLLMEngine(context.applicationContext).also { instance = it }
+            }
+        }
+        
+        fun isNativeAvailable(): Boolean = nativeLibraryLoaded
+    }
     
     private var isLoaded = false
     private var modelPath: String? = null
@@ -28,8 +57,31 @@ class LocalLLMEngine(private val context: Context) {
     fun isReady(): Boolean = isLoaded && modelPath != null
     
     /**
+     * Check if real inference is available (native library loaded)
+     */
+    fun isRealInferenceAvailable(): Boolean = nativeLibraryLoaded
+    
+    /**
+     * Get engine status info
+     */
+    fun getStatusInfo(): EngineStatus {
+        return EngineStatus(
+            nativeAvailable = nativeLibraryLoaded,
+            modelLoaded = isLoaded,
+            modelPath = modelPath,
+            mode = if (nativeLibraryLoaded) "Real Inference" else "Demo Mode"
+        )
+    }
+    
+    data class EngineStatus(
+        val nativeAvailable: Boolean,
+        val modelLoaded: Boolean,
+        val modelPath: String?,
+        val mode: String
+    )
+    
+    /**
      * Load a GGUF model for inference
-     * Returns true if successful
      */
     suspend fun loadModel(path: String): Result<Boolean> = withContext(Dispatchers.IO) {
         try {
@@ -38,13 +90,30 @@ class LocalLLMEngine(private val context: Context) {
                 return@withContext Result.failure(Exception("Model file not found: $path"))
             }
             
-            // In production, initialize llama.cpp context here
-            // For now, simulate loading
-            modelPath = path
-            isLoaded = true
+            val fileSize = file.length()
+            if (fileSize < 100_000_000L) {
+                return@withContext Result.failure(Exception("Model file too small or incomplete"))
+            }
+            
+            Log.d(TAG, "Loading model from: $path (${fileSize / 1_000_000}MB)")
+            
+            if (nativeLibraryLoaded) {
+                // Real inference - initialize llama.cpp context
+                // This would call native method: nativeLoadModel(path)
+                // For now, simulate loading
+                modelPath = path
+                isLoaded = true
+                Log.d(TAG, "Model loaded successfully (native)")
+            } else {
+                // Demo mode - just track the path
+                modelPath = path
+                isLoaded = true
+                Log.d(TAG, "Model loaded in demo mode")
+            }
             
             Result.success(true)
         } catch (e: Exception) {
+            Log.e(TAG, "Failed to load model", e)
             Result.failure(e)
         }
     }
@@ -55,16 +124,11 @@ class LocalLLMEngine(private val context: Context) {
     fun unloadModel() {
         isLoaded = false
         modelPath = null
-        // In production, free llama.cpp context here
+        Log.d(TAG, "Model unloaded")
     }
     
     /**
      * Generate text completion
-     * 
-     * @param prompt The input prompt
-     * @param maxTokens Maximum tokens to generate
-     * @param temperature Sampling temperature (0.0 - 2.0)
-     * @return Flow of generated tokens
      */
     fun generate(
         prompt: String,
@@ -75,26 +139,16 @@ class LocalLLMEngine(private val context: Context) {
             throw Exception("Model not loaded. Please load a model first.")
         }
         
-        // In production, this would call llama.cpp inference
-        // For demonstration, we'll emit a placeholder response
-        
-        // Simulate streaming response
-        val simulatedResponse = """
-            [Local AI Response]
-            
-            I'm running locally on your device using the downloaded model.
-            The model is loaded from: ${modelPath?.substringAfterLast("/")}
-            
-            Your prompt was: "${prompt.take(100)}${if (prompt.length > 100) "..." else ""}"
-            
-            Note: To enable real local inference, integrate llama.cpp Android bindings.
-        """.trimIndent()
-        
-        // Simulate token-by-token streaming
-        val words = simulatedResponse.split(" ")
-        words.forEach { word ->
-            emit("$word ")
-            kotlinx.coroutines.delay(30) // Simulate generation speed
+        if (nativeLibraryLoaded) {
+            // Real inference would happen here
+            // For now, emit a message about native support
+            emit("✅ Native inference available but not yet integrated. ")
+            emit("Model loaded: ${modelPath?.substringAfterLast("/")}\n\n")
+            emit("To enable full inference, integrate llama.cpp native calls.")
+        } else {
+            // Demo mode - explain the situation
+            val demoResponse = buildDemoResponse(prompt)
+            emit(demoResponse)
         }
         
     }.flowOn(Dispatchers.IO)
@@ -103,7 +157,7 @@ class LocalLLMEngine(private val context: Context) {
      * Generate with conversation history
      */
     fun chat(
-        messages: List<Pair<String, String>>, // (role, content)
+        messages: List<Pair<String, String>>,
         maxTokens: Int = 512,
         temperature: Float = 0.7f
     ): Flow<String> = flow {
@@ -111,23 +165,48 @@ class LocalLLMEngine(private val context: Context) {
             throw Exception("Model not loaded")
         }
         
-        // Build conversation prompt
-        val prompt = buildString {
-            append("<|begin_of_text|>")
-            messages.forEach { (role, content) ->
-                when (role) {
-                    "system" -> append("<|start_header_id|>system<|end_header_id|>\n$content<|eot_id|>")
-                    "user" -> append("<|start_header_id|>user<|end_header_id|>\n$content<|eot_id|>")
-                    "assistant" -> append("<|start_header_id|>assistant<|end_header_id|>\n$content<|eot_id|>")
-                }
-            }
-            append("<|start_header_id|>assistant<|end_header_id|>\n")
+        // Get the last user message
+        val lastUserMessage = messages.lastOrNull { it.first == "user" }?.second ?: ""
+        
+        if (nativeLibraryLoaded) {
+            // Real inference
+            emit("🔄 Native inference mode ready.\n\n")
+            emit("Model: ${modelPath?.substringAfterLast("/")}\n\n")
+            emit("Full inference requires native JNI integration.")
+        } else {
+            // Demo mode
+            val demoResponse = buildDemoChatResponse(lastUserMessage)
+            emit(demoResponse)
         }
         
-        // Generate
-        generate(prompt, maxTokens, temperature).collect { emit(it) }
-        
     }.flowOn(Dispatchers.IO)
+    
+    private fun buildDemoResponse(prompt: String): String {
+        return buildString {
+            appendLine("⚠️ **Demo Mode**\n")
+            appendLine("Local AI đang chạy ở chế độ demo.")
+            appendLine("Model đã tải: `${modelPath?.substringAfterLast("/")}`\n")
+            appendLine("---")
+            appendLine("Để bật inference thực sự, cần tích hợp **llama.cpp** native library.")
+            appendLine("\n💡 **Khuyến nghị:** Sử dụng Cloud AI để có trải nghiệm tốt nhất.")
+        }
+    }
+    
+    private fun buildDemoChatResponse(userMessage: String): String {
+        // Provide a helpful response in demo mode
+        return buildString {
+            appendLine("👋 Xin chào! Tôi là VenAI Local (Demo Mode).")
+            appendLine()
+            appendLine("⚠️ Model đã được tải nhưng đang chạy ở chế độ demo.")
+            appendLine("Để có trải nghiệm AI thực sự, bạn có thể:")
+            appendLine()
+            appendLine("1. **Sử dụng Cloud AI** - Toggle nút Cloud ở trên")
+            appendLine("2. **Tích hợp llama.cpp** - Để bật inference offline")
+            appendLine()
+            appendLine("📦 Model: `${modelPath?.substringAfterLast("/")}`")
+            appendLine("📊 Kích thước: ~4.5GB")
+        }
+    }
     
     /**
      * Get model info
@@ -136,17 +215,8 @@ class LocalLLMEngine(private val context: Context) {
         return mapOf(
             "loaded" to isLoaded,
             "modelPath" to (modelPath ?: "none"),
-            "engineType" to "placeholder"
+            "nativeAvailable" to nativeLibraryLoaded,
+            "mode" to if (nativeLibraryLoaded) "ready" else "demo"
         )
-    }
-    
-    companion object {
-        private var instance: LocalLLMEngine? = null
-        
-        fun getInstance(context: Context): LocalLLMEngine {
-            return instance ?: synchronized(this) {
-                instance ?: LocalLLMEngine(context.applicationContext).also { instance = it }
-            }
-        }
     }
 }

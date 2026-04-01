@@ -4416,7 +4416,6 @@ androidx.compose.material.icons.filled.ScatterPlotKt
 androidx.compose.material.icons.filled.ScheduleSendKt
 androidx.compose.material.icons.filled.SchemaKt
 androidx.compose.material.icons.filled.SchoolKt
-androidx.compose.material.icons.filled.ScienceKt
 androidx.compose.material.icons.filled.ScoreKt
 androidx.compose.material.icons.filled.ScoreboardKt
 androidx.compose.material.icons.filled.ScreenLockLandscapeKt
@@ -27099,9 +27098,17 @@ com.agentstudio.data.api.OpenRouterApi$Companion:
 com.agentstudio.data.api.OpenRouterApi:
     private static final java.lang.String BASE_URL
     public final java.lang.Object chat-gIAlu-s(com.agentstudio.data.model.ChatRequest,kotlin.coroutines.Continuation)
+com.agentstudio.data.local.LocalLLMEngine$EngineStatus
+com.agentstudio.data.local.LocalLLMEngine$generate$1
 com.agentstudio.data.local.LocalLLMEngine:
+    private static final java.lang.String TAG
+    public static final synthetic java.lang.String access$buildDemoResponse(com.agentstudio.data.local.LocalLLMEngine,java.lang.String)
+    private final java.lang.String buildDemoResponse(java.lang.String)
+    public final kotlinx.coroutines.flow.Flow generate(java.lang.String,int,float)
     public static synthetic kotlinx.coroutines.flow.Flow generate$default(com.agentstudio.data.local.LocalLLMEngine,java.lang.String,int,float,int,java.lang.Object)
     public final java.util.Map getModelInfo()
+    public final com.agentstudio.data.local.LocalLLMEngine$EngineStatus getStatusInfo()
+    public final boolean isRealInferenceAvailable()
     public final void unloadModel()
 com.agentstudio.data.local.LocalModel:
     public static final int $stable
@@ -32259,7 +32266,9 @@ kotlin.text.StringsKt__StringsKt:
     private static final java.lang.String replaceRange(java.lang.String,int,int,java.lang.CharSequence)
     private static final java.lang.String replaceRange(java.lang.String,kotlin.ranges.IntRange,java.lang.CharSequence)
     private static final java.util.List split(java.lang.CharSequence,kotlin.text.Regex,int)
+    public static final java.util.List split(java.lang.CharSequence,java.lang.String[],boolean,int)
     static synthetic java.util.List split$default(java.lang.CharSequence,kotlin.text.Regex,int,int,java.lang.Object)
+    public static synthetic java.util.List split$default(java.lang.CharSequence,java.lang.String[],boolean,int,int,java.lang.Object)
     private static final kotlin.sequences.Sequence splitToSequence(java.lang.CharSequence,kotlin.text.Regex,int)
     public static final kotlin.sequences.Sequence splitToSequence(java.lang.CharSequence,char[],boolean,int)
     static synthetic kotlin.sequences.Sequence splitToSequence$default(java.lang.CharSequence,kotlin.text.Regex,int,int,java.lang.Object)
@@ -35734,14 +35743,14 @@ androidx.collection.internal.ContainerHelpersKt:
     public static final long[] EMPTY_LONGS
     public static final int idealIntArraySize(int)
 androidx.collection.internal.Lock
-androidx.collection.internal.LruHashMap$$InternalSynthetic$IA$277$a8bd5b692abb6a1fbd93b76aaf7f9becdd78cc091a83aff01975355a13463d27$0
+androidx.collection.internal.LruHashMap$$InternalSynthetic$IA$276$a8bd5b692abb6a1fbd93b76aaf7f9becdd78cc091a83aff01975355a13463d27$0
 androidx.collection.internal.LruHashMap$$InternalSyntheticThrowCCEIfNotNull$22$9f42f7c0762bc1b0612307077f2b33f430b1f507438d318c1aa5a99737abbc55$0
 androidx.collection.internal.LruHashMap$$InternalSyntheticThrowCCEIfNotNull$7$a964133824606ce60b0a3cc51454a84c99e7be75eb74106a0441036b103e8c28$1
 androidx.collection.internal.LruHashMap$$InternalSyntheticThrowCCEIfNotNull$7$e085c5f7377d900c42673613016aba5630ff6ae61d609c750b0e19d9535e9175$0
 androidx.collection.internal.LruHashMap$$InternalSyntheticThrowCCEIfNotNull$7$e085c5f7377d900c42673613016aba5630ff6ae61d609c750b0e19d9535e9175$1
 androidx.collection.internal.LruHashMap:
     public void <init>(android.view.Window,android.view.View)
-    public void <init>(androidx.collection.internal.LruHashMap$$InternalSynthetic$IA$277$a8bd5b692abb6a1fbd93b76aaf7f9becdd78cc091a83aff01975355a13463d27$0)
+    public void <init>(androidx.collection.internal.LruHashMap$$InternalSynthetic$IA$276$a8bd5b692abb6a1fbd93b76aaf7f9becdd78cc091a83aff01975355a13463d27$0)
     public final void add(int)
     public static void addFontFamily()
     public final androidx.compose.foundation.lazy.layout.LazyLayoutBeyondBoundsInfo$Interval addInterval(int,int)
@@ -37416,7 +37425,7 @@ androidx.compose.foundation.lazy.LazyListMeasureResult:
     public static float getConsumedScroll()
     public static androidx.compose.foundation.lazy.LazyListMeasuredItem getFirstVisibleItem()
     public static int getFirstVisibleItemScrollOffset()
-androidx.compose.foundation.lazy.LazyListMeasuredItem$$InternalSyntheticThrowCCEIfNotNull$211$8f9e0d551c4fc463f245ebe8218205332fc67a85536be9824f17cb513f2750ef$0
+androidx.compose.foundation.lazy.LazyListMeasuredItem$$InternalSyntheticThrowCCEIfNotNull$210$8f9e0d551c4fc463f245ebe8218205332fc67a85536be9824f17cb513f2750ef$0
 androidx.compose.foundation.lazy.LazyListMeasuredItem:
     public final int afterContentPadding
     public final int beforeContentPadding
@@ -38695,6 +38704,8 @@ androidx.compose.material.icons.filled.NotificationsKt:
 androidx.compose.material.icons.filled.PersonKt:
     static void <clinit>()
 androidx.compose.material.icons.filled.ScheduleKt:
+    static void <clinit>()
+androidx.compose.material.icons.filled.ScienceKt:
     static void <clinit>()
 androidx.compose.material.icons.filled.SearchKt:
     static void <clinit>()
@@ -43201,7 +43212,7 @@ androidx.compose.ui.layout.ContentScale:
     static void <clinit>()
     public abstract long computeScaleFactor-H7hwNQA(long,long)
 androidx.compose.ui.layout.ContentScaleKt
-androidx.compose.ui.layout.FixedScale$$InternalSyntheticThrowCCEIfNotNull$280$61802572eb2dc9f914bcb0bdf30b7053f9fddb69433f94dc2982e7047a1cd34e$0
+androidx.compose.ui.layout.FixedScale$$InternalSyntheticThrowCCEIfNotNull$279$61802572eb2dc9f914bcb0bdf30b7053f9fddb69433f94dc2982e7047a1cd34e$0
 androidx.compose.ui.layout.FixedScale
 androidx.compose.ui.layout.HorizontalAlignmentLine:
     static void <clinit>()
@@ -43560,11 +43571,11 @@ androidx.compose.ui.node.LayoutModifierNode$maxIntrinsicHeight$1
 androidx.compose.ui.node.LayoutModifierNode$maxIntrinsicWidth$1
 androidx.compose.ui.node.LayoutModifierNode$minIntrinsicHeight$1
 androidx.compose.ui.node.LayoutModifierNode$minIntrinsicWidth$1
-androidx.compose.ui.node.LayoutModifierNodeCoordinator$$InternalSyntheticThrowCCEIfNotNull$227$82c1a67ffc6a3ff6422bd25e53d91573567bece10c6892ec64738be87d93f865$0
-androidx.compose.ui.node.LayoutModifierNodeCoordinator$$InternalSyntheticThrowCCEIfNotNull$235$51925e4728e9a87308d1043100ba3e515445f7e52b904a4a6009ad441cf85d86$0
-androidx.compose.ui.node.LayoutModifierNodeCoordinator$$InternalSyntheticThrowCCEIfNotNull$254$29950148d333ab42cd204cf036332d0826e0b9437b95b1c7e302c487fcfa2b17$0
-androidx.compose.ui.node.LayoutModifierNodeCoordinator$$InternalSyntheticThrowCCEIfNotNull$254$7f514729afd4e42b2584dec0f8fa6df630ac8eed595c7d593bccdb59679e05c3$0
-androidx.compose.ui.node.LayoutModifierNodeCoordinator$$InternalSyntheticThrowCCEIfNotNull$254$8b62e12c1f1f9c2965c5f0b5ab05921608319097b725c21b7704b012ac56153e$0
+androidx.compose.ui.node.LayoutModifierNodeCoordinator$$InternalSyntheticThrowCCEIfNotNull$226$82c1a67ffc6a3ff6422bd25e53d91573567bece10c6892ec64738be87d93f865$0
+androidx.compose.ui.node.LayoutModifierNodeCoordinator$$InternalSyntheticThrowCCEIfNotNull$234$51925e4728e9a87308d1043100ba3e515445f7e52b904a4a6009ad441cf85d86$0
+androidx.compose.ui.node.LayoutModifierNodeCoordinator$$InternalSyntheticThrowCCEIfNotNull$253$29950148d333ab42cd204cf036332d0826e0b9437b95b1c7e302c487fcfa2b17$0
+androidx.compose.ui.node.LayoutModifierNodeCoordinator$$InternalSyntheticThrowCCEIfNotNull$253$7f514729afd4e42b2584dec0f8fa6df630ac8eed595c7d593bccdb59679e05c3$0
+androidx.compose.ui.node.LayoutModifierNodeCoordinator$$InternalSyntheticThrowCCEIfNotNull$253$8b62e12c1f1f9c2965c5f0b5ab05921608319097b725c21b7704b012ac56153e$0
 androidx.compose.ui.node.LayoutModifierNodeCoordinator$Companion
 androidx.compose.ui.node.LayoutModifierNodeCoordinator$LookaheadDelegateForLayoutModifierNode
 androidx.compose.ui.node.LayoutModifierNodeCoordinator:
@@ -46837,8 +46848,6 @@ androidx.datastore.core.SingleProcessDataStore$actor$3:
 androidx.datastore.core.SingleProcessDataStore$data$1$1:
     public int label
     public static java.lang.Object invoke$37()
-androidx.datastore.core.SingleProcessDataStore$data$1$invokeSuspend$$inlined$map$1$2:
-    public final java.lang.Object emit$2()
 androidx.datastore.core.SingleProcessDataStore$data$1$invokeSuspend$$inlined$map$1:
     public final synthetic int $r8$classId
 androidx.datastore.core.SingleProcessDataStore$data$1:
@@ -46969,13 +46978,14 @@ androidx.datastore.preferences.core.PreferencesFactory:
     public static final java.lang.String ChatScreen$lambda$1(androidx.compose.runtime.MutableState)
     public static final boolean ChatScreen$lambda$2(androidx.compose.runtime.MutableState)
     public static final java.lang.String ChatScreen$lambda$3(androidx.compose.runtime.MutableState)
-    public static final java.lang.String ChatScreen$lambda$7(androidx.compose.runtime.MutableState)
+    public static final boolean ChatScreen$lambda$5(androidx.compose.runtime.MutableState)
+    public static final java.lang.String ChatScreen$lambda$8(androidx.compose.runtime.MutableState)
     public static final kotlinx.coroutines.CompletableDeferredImpl CompletableDeferred(kotlinx.coroutines.Job)
-    public static final boolean PremiumFloatingChatInput$lambda$27(androidx.compose.runtime.MutableState)
-    public static final float PremiumFloatingChatInput$lambda$29(androidx.compose.animation.core.InfiniteTransition$TransitionAnimationState)
-    public static final void access$ChatScreen$lambda$11(androidx.compose.runtime.MutableState,boolean)
+    public static final boolean PremiumFloatingChatInput$lambda$28(androidx.compose.runtime.MutableState)
+    public static final float PremiumFloatingChatInput$lambda$30(androidx.compose.animation.core.InfiniteTransition$TransitionAnimationState)
+    public static final void access$ChatScreen$lambda$12(androidx.compose.runtime.MutableState,boolean)
     public static final boolean access$ChatScreen$lambda$2(androidx.compose.runtime.State)
-    public static final float access$PremiumFloatingChatInput$lambda$28(androidx.compose.runtime.State)
+    public static final float access$PremiumFloatingChatInput$lambda$29(androidx.compose.runtime.State)
     public static final kotlinx.coroutines.flow.ReadonlyStateFlow asStateFlow(kotlinx.coroutines.flow.StateFlowImpl)
     public static final java.lang.Object collect(kotlinx.coroutines.flow.Flow,kotlin.coroutines.Continuation)
     public static final kotlinx.coroutines.flow.FlowKt__LimitKt$dropWhile$$inlined$unsafeFlow$1 dropWhile(kotlinx.coroutines.flow.internal.FusibleFlow,kotlin.jvm.functions.Function2)
@@ -48285,10 +48295,8 @@ com.agentstudio.data.api.OpenRouterApi:
     public static kotlinx.coroutines.flow.Flow chatStream()
 com.agentstudio.data.local.LocalLLMEngine$Companion:
     public static com.agentstudio.data.local.LocalLLMEngine getInstance()
-com.agentstudio.data.local.LocalLLMEngine$chat$1$1
+    public static boolean isNativeAvailable()
 com.agentstudio.data.local.LocalLLMEngine$chat$1:
-    public final java.lang.Object invoke$14()
-com.agentstudio.data.local.LocalLLMEngine$generate$1:
     public final java.lang.Object invoke$14()
 com.agentstudio.data.local.LocalLLMEngine$loadModel$2:
     public int label
@@ -48296,8 +48304,8 @@ com.agentstudio.data.local.LocalLLMEngine$loadModel$2:
 com.agentstudio.data.local.LocalLLMEngine:
     public static final int $stable
     public final android.content.Context context
+    public static java.lang.String buildDemoChatResponse()
     public static kotlinx.coroutines.flow.Flow chat()
-    public static kotlinx.coroutines.flow.Flow generate()
     public final boolean isReady()
 com.agentstudio.data.local.LocalModel:
     static void <clinit>()
@@ -48455,6 +48463,7 @@ com.agentstudio.ui.screens.ChatViewModel:
     public final kotlinx.coroutines.flow.ReadonlyStateFlow getError()
     public final kotlinx.coroutines.flow.ReadonlyStateFlow getMessages()
     public final kotlinx.coroutines.flow.ReadonlyStateFlow getSelectedModel()
+    public final kotlinx.coroutines.flow.ReadonlyStateFlow isDemoMode()
     public final kotlinx.coroutines.flow.ReadonlyStateFlow isLoading()
     public final kotlinx.coroutines.flow.ReadonlyStateFlow isLocalReady()
     public final kotlinx.coroutines.flow.ReadonlyStateFlow isUsingLocal()
@@ -48467,17 +48476,19 @@ com.agentstudio.ui.screens.ChatViewModelFactory:
 com.agentstudio.ui.screens.ComposableSingletons$ChatScreenKt$lambda-2$1
 com.agentstudio.ui.screens.ComposableSingletons$ChatScreenKt$lambda-3$1
 com.agentstudio.ui.screens.ComposableSingletons$ChatScreenKt$lambda-4$1
-com.agentstudio.ui.screens.ComposableSingletons$ChatScreenKt$lambda-5$1:
+com.agentstudio.ui.screens.ComposableSingletons$ChatScreenKt$lambda-5$1
+com.agentstudio.ui.screens.ComposableSingletons$ChatScreenKt$lambda-6$1:
     public final void invoke(kotlin.jvm.functions.Function2,androidx.compose.runtime.Composer,int)
-com.agentstudio.ui.screens.ComposableSingletons$ChatScreenKt$lambda-6$1
+com.agentstudio.ui.screens.ComposableSingletons$ChatScreenKt$lambda-7$1
 com.agentstudio.ui.screens.ComposableSingletons$ChatScreenKt:
     public static final com.agentstudio.ui.screens.ComposableSingletons$ChatScreenKt INSTANCE
     public static kotlin.jvm.functions.Function2 getLambda-1$app_release()
     public static kotlin.jvm.functions.Function2 getLambda-2$app_release()
     public static androidx.compose.runtime.internal.ComposableLambdaImpl getLambda-3$app_release()
-    public static kotlin.jvm.functions.Function2 getLambda-4$app_release()
-    public static kotlin.jvm.functions.Function3 getLambda-5$app_release()
-    public static kotlin.jvm.functions.Function2 getLambda-6$app_release()
+    public static androidx.compose.runtime.internal.ComposableLambdaImpl getLambda-4$app_release()
+    public static kotlin.jvm.functions.Function2 getLambda-5$app_release()
+    public static kotlin.jvm.functions.Function3 getLambda-6$app_release()
+    public static kotlin.jvm.functions.Function2 getLambda-7$app_release()
 com.agentstudio.ui.screens.ComposableSingletons$ModelSelectionScreenKt$lambda-1$1
 com.agentstudio.ui.screens.ComposableSingletons$ModelSelectionScreenKt$lambda-2$1
 com.agentstudio.ui.screens.ComposableSingletons$ModelSelectionScreenKt$lambda-3$1
@@ -49021,8 +49032,6 @@ kotlin.sequences.SequenceBuilderIterator:
     public static java.lang.Object nextNotReady()
     public static void setNextStep()
 kotlin.sequences.SequenceScope
-kotlin.sequences.SequencesKt:
-    public static kotlin.collections.IndexingIterable asIterable(kotlin.text.DelimitedRangesSequence)
 kotlin.sequences.SequencesKt__SequenceBuilderKt$sequence$$inlined$Sequence$1
 kotlin.sequences.SequencesKt__SequenceBuilderKt
 kotlin.sequences.SequencesKt__SequencesJVMKt
@@ -49212,7 +49221,7 @@ kotlinx.coroutines.CoroutineExceptionHandler:
     static void <clinit>()
 kotlinx.coroutines.CoroutineExceptionHandlerKt
 kotlinx.coroutines.CoroutineId$$InternalSyntheticThrowCCEIfNotNull$18$f32d3c65e79275cc0e34133ff17172a91084ea4fa58ff765934c26285df444a4$0
-kotlinx.coroutines.CoroutineId$$InternalSyntheticThrowCCEIfNotNull$280$a04cd55831796dad4a4038d4eb866607cad4d88ce7c01ff729936a1ef385fb02$0
+kotlinx.coroutines.CoroutineId$$InternalSyntheticThrowCCEIfNotNull$279$a04cd55831796dad4a4038d4eb866607cad4d88ce7c01ff729936a1ef385fb02$0
 kotlinx.coroutines.CoroutineId
 kotlinx.coroutines.CoroutineName$Key
 kotlinx.coroutines.CoroutineName:
@@ -49681,7 +49690,7 @@ kotlinx.coroutines.flow.ReadonlyStateFlow:
     public final kotlinx.coroutines.Job job
 kotlinx.coroutines.flow.SafeFlow
 kotlinx.coroutines.flow.SharedFlow
-kotlinx.coroutines.flow.SharedFlowImpl$$InternalSyntheticThrowCCEIfNotNull$171$b38dab834c988858ddee4e60b74eb383caed7af1bf78eca8428bab8b3c852414$0
+kotlinx.coroutines.flow.SharedFlowImpl$$InternalSyntheticThrowCCEIfNotNull$170$b38dab834c988858ddee4e60b74eb383caed7af1bf78eca8428bab8b3c852414$0
 kotlinx.coroutines.flow.SharedFlowImpl$WhenMappings
 kotlinx.coroutines.flow.SharedFlowImpl:
     public static void cancelEmitter()
@@ -49723,7 +49732,7 @@ kotlinx.coroutines.flow.StartedWhileSubscribed$command$1:
 kotlinx.coroutines.flow.StartedWhileSubscribed$command$2:
     public int label
     public final java.lang.Object invoke$44()
-kotlinx.coroutines.flow.StateFlowImpl$$InternalSyntheticThrowCCEIfNotNull$171$48f8e1a998bfe838c6c4c78d934377956702ea666a83e7852d7dcc1778b7fce1$0
+kotlinx.coroutines.flow.StateFlowImpl$$InternalSyntheticThrowCCEIfNotNull$170$48f8e1a998bfe838c6c4c78d934377956702ea666a83e7852d7dcc1778b7fce1$0
 kotlinx.coroutines.flow.StateFlowImpl:
     public static kotlinx.coroutines.flow.StateFlowSlot createSlot()
     public static kotlinx.coroutines.flow.StateFlowSlot[] createSlotArray()
@@ -49901,8 +49910,8 @@ kotlinx.coroutines.internal.StackTraceRecoveryKt:
 kotlinx.coroutines.internal.Symbol
 kotlinx.coroutines.internal.SystemPropsKt
 kotlinx.coroutines.internal.SystemPropsKt__SystemProps_commonKt
-kotlinx.coroutines.internal.ThreadContextKt$countAll$1$$InternalSyntheticThrowCCEIfNotNull$280$a546074a2ed249d1eabefdc79e18209b1ee65e7faf56680f7461c253f28dd8e6$0
-kotlinx.coroutines.internal.ThreadContextKt$countAll$1$$InternalSyntheticThrowCCEIfNotNull$280$a546074a2ed249d1eabefdc79e18209b1ee65e7faf56680f7461c253f28dd8e6$2
+kotlinx.coroutines.internal.ThreadContextKt$countAll$1$$InternalSyntheticThrowCCEIfNotNull$279$a546074a2ed249d1eabefdc79e18209b1ee65e7faf56680f7461c253f28dd8e6$0
+kotlinx.coroutines.internal.ThreadContextKt$countAll$1$$InternalSyntheticThrowCCEIfNotNull$279$a546074a2ed249d1eabefdc79e18209b1ee65e7faf56680f7461c253f28dd8e6$2
 kotlinx.coroutines.internal.ThreadContextKt$countAll$1:
     public static kotlinx.coroutines.internal.ThreadState invoke()
     public static java.lang.Object invoke$46()

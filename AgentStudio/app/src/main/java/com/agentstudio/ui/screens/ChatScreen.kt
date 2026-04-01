@@ -50,6 +50,7 @@ fun ChatScreen(
     val error by viewModel.error.collectAsState()
     val isUsingLocal by viewModel.isUsingLocal.collectAsState()
     val isLocalReady by viewModel.isLocalReady.collectAsState()
+    val isDemoMode by viewModel.isDemoMode.collectAsState()
     
     var inputText by remember { mutableStateOf("") }
     var showModelSelector by remember { mutableStateOf(false) }
@@ -248,6 +249,43 @@ fun ChatScreen(
                                         text = "Cần tải model trước khi dùng",
                                         color = Color(0xFFF59E0B),
                                         fontSize = 12.sp
+                                    )
+                                }
+                            }
+                        }
+                        
+                        // Demo mode banner
+                        if (isUsingLocal && isLocalReady && isDemoMode) {
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = Color(0xFF8B5CF6).copy(alpha = 0.15f)
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(
+                                            Icons.Default.Science,
+                                            contentDescription = null,
+                                            tint = Color(0xFF8B5CF6),
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text(
+                                            text = "Local AI - Demo Mode",
+                                            color = Color(0xFF8B5CF6),
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.SemiBold
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        text = "Model đã tải nhưng đang chạy demo.\nSử dụng Cloud AI để có trải nghiệm tốt nhất.",
+                                        color = Color(0xFF94A3B8),
+                                        fontSize = 11.sp,
+                                        textAlign = TextAlign.Center
                                     )
                                 }
                             }

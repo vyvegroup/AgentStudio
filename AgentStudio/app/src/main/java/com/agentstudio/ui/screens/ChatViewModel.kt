@@ -50,6 +50,10 @@ class ChatViewModel(
     private val _isLocalReady = MutableStateFlow(false)
     val isLocalReady: StateFlow<Boolean> = _isLocalReady.asStateFlow()
     
+    // Demo mode - Local AI runs in demo mode until llama.cpp is integrated
+    private val _isDemoMode = MutableStateFlow(true)
+    val isDemoMode: StateFlow<Boolean> = _isDemoMode.asStateFlow()
+    
     private val conversationHistory = mutableListOf<ChatMessage>()
     private var apiKey: String = DEFAULT_API_KEY
     
@@ -68,6 +72,9 @@ class ChatViewModel(
             viewModelScope.launch {
                 val isDownloaded = localModelManager?.isModelDownloaded(LocalModels.GEMMA_4B) ?: false
                 _isLocalReady.value = isDownloaded
+                
+                // Check if native inference is available (demo mode if not)
+                _isDemoMode.value = !LocalLLMEngine.isNativeAvailable()
             }
         }
         
