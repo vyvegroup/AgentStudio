@@ -74,17 +74,17 @@ fun ReplitStyleAILogo(
         initialValue = 120f,
         targetValue = 480f,
         animationSpec = infiniteRepeatable(
-            animation = (orbitSpeed * 1.3f).toInt(), easing = LinearEasing),
+            animation = tween((orbitSpeed * 1.3f).toInt(), easing = LinearEasing),
             repeatMode = RepeatMode.Restart
         ),
         label = "orbit2"
     )
-    
+
     val orbit3 by infiniteTransition.animateFloat(
         initialValue = 240f,
         targetValue = 600f,
         animationSpec = infiniteRepeatable(
-            animation = (orbitSpeed * 0.8f).toInt(), easing = LinearEasing),
+            animation = tween((orbitSpeed * 0.8f).toInt(), easing = LinearEasing),
             repeatMode = RepeatMode.Restart
         ),
         label = "orbit3"
@@ -221,8 +221,7 @@ fun ReplitStyleAILogo(
                             Color(0xFFEC4899),
                             Color(0xFF8B5CF6)
                         ),
-                        center = Offset(center, center),
-                        angleOffset = colorPhase
+                        center = Offset(center, center)
                     ),
                     radius = baseRadius * 0.7f * corePulse,
                     center = Offset(center, center)
