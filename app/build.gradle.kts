@@ -16,8 +16,8 @@ android {
         applicationId = "com.agentstudio"
         minSdk = 26
         targetSdk = 34
-        versionCode = 3
-        versionName = "3.6.0"
+        versionCode = 8
+        versionName = "3.7.2"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
