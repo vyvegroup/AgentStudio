@@ -58,9 +58,10 @@ class AgentExecutor(
                     appendDebug("📋 System prompt added (${systemPrompt.length} chars)")
                 }
                 
-                // Add conversation history
-                messages.addAll(conversationHistory)
-                appendDebug("📚 History: ${conversationHistory.size} messages")
+                // Add conversation history (limit to last 20 messages to avoid context overflow)
+                val recentHistory = conversationHistory.takeLast(20)
+                messages.addAll(recentHistory)
+                appendDebug("📚 History: ${recentHistory.size} messages")
                 
                 // Add current user message
                 val userMessage = MessageContent(role = "user", content = userInput)
@@ -70,7 +71,8 @@ class AgentExecutor(
                 onEvent(ExecutionEvent.UserMessage(userInput))
                 
                 var iteration = 0
-                val maxIterations = 15
+                val maxIterations = 8
+                var consecutiveNoTools = 0
                 
                 do {
                     iteration++
@@ -90,7 +92,7 @@ class AgentExecutor(
                                 onEvent(ExecutionEvent.StreamChunk(event.text))
                             }
                             is OpenRouterApi.StreamEvent.ToolCall -> {
-                                appendDebug("🔧 TOOL CALL: ${event.toolCall.function.name}")
+                                appendDebug("🔧 TOOL CALL (API): ${event.toolCall.function.name}")
                                 appendDebug("   Args: ${event.toolCall.function.arguments.take(100)}...")
                                 toolCalls.add(event.toolCall)
                             }
@@ -106,8 +108,19 @@ class AgentExecutor(
                         }
                     }
                     
-                    // Add assistant message to history
                     val assistantContent = responseContent.toString()
+                    
+                    // Check if model wrote tool calls in text instead of using function calling
+                    val textBasedToolCalls = extractToolCallsFromText(assistantContent)
+                    if (textBasedToolCalls.isNotEmpty() && toolCalls.isEmpty()) {
+                        appendDebug("⚠️ Detected tool calls in TEXT (model didn't use function calling)")
+                        textBasedToolCalls.forEach { tc ->
+                            appendDebug("   📝 Parsed: ${tc.function.name} -> ${tc.function.arguments.take(50)}...")
+                        }
+                        toolCalls.addAll(textBasedToolCalls)
+                    }
+                    
+                    // Add assistant message to history
                     if (assistantContent.isNotEmpty() || toolCalls.isNotEmpty()) {
                         val assistantMessage = MessageContent(
                             role = "assistant",
@@ -125,6 +138,7 @@ class AgentExecutor(
                     
                     // Execute tools if any
                     if (toolCalls.isNotEmpty()) {
+                        consecutiveNoTools = 0
                         _state.value = AgentState.ExecutingTools
                         appendDebug("\n⚡ EXECUTING ${toolCalls.size} TOOL(S)")
                         
@@ -134,6 +148,7 @@ class AgentExecutor(
                             
                             appendDebug("\n┌─────────────────────────────────────────┐")
                             appendDebug("│ 🛠️  $toolName")
+                            appendDebug("│ Args: ${toolArgs.take(80)}")
                             appendDebug("└─────────────────────────────────────────┘")
                             
                             onEvent(ExecutionEvent.ToolExecutionStarted(
@@ -166,6 +181,13 @@ class AgentExecutor(
                             messages.add(toolMessage)
                             conversationHistory.add(toolMessage)
                         }
+                    } else {
+                        consecutiveNoTools++
+                        // If no tools for 2 consecutive iterations, we're done
+                        if (consecutiveNoTools >= 2) {
+                            appendDebug("\n✅ No more tool calls needed")
+                            break
+                        }
                     }
                     
                     delay(100)
@@ -193,6 +215,82 @@ class AgentExecutor(
                 onEvent(ExecutionEvent.Error(e.message ?: "Unknown error"))
             }
         }
+    }
+    
+    /**
+     * Extract tool calls from text when model writes them as text instead of using function calling
+     */
+    private fun extractToolCallsFromText(text: String): List<ToolCallRequest> {
+        val toolCalls = mutableListOf<ToolCallRequest>()
+        
+        // Patterns to match tool calls in text
+        val patterns = listOf(
+            // read_file(path="...")
+            Regex("""(\w+)\s*\(\s*(\w+)\s*=\s*["']([^"']+)["']\s*\)"""),
+            // read_file(path="...", other="...")
+            Regex("""(\w+)\s*\(\s*(\w+)\s*=\s*["']([^"']+)["'](?:\s*,\s*(\w+)\s*=\s*["']([^"']+)["'])*\s*\)"""),
+            // Multi-line format
+            Regex("""(\w+)\s*\(\s*([\w\s=,",']+)\s*\)""", RegexOption.MULTILINE)
+        )
+        
+        // Known tool names
+        val knownTools = setOf(
+            "create_file", "read_file", "edit_file", "delete_file",
+            "list_directory", "create_directory", "search_files",
+            "web_search", "wiki_search", "image_search", "image_info"
+        )
+        
+        // Try to find tool calls in text
+        for (pattern in patterns) {
+            pattern.findAll(text).forEach { match ->
+                val toolName = match.groupValues[1]
+                
+                if (toolName in knownTools) {
+                    // Build arguments JSON from the match
+                    val args = mutableMapOf<String, String>()
+                    
+                    // Parse key=value pairs
+                    val argsText = match.groupValues.getOrNull(2) ?: ""
+                    
+                    // Simple parsing for key="value" or key='value'
+                    val argPattern = Regex("""(\w+)\s*=\s*["']([^"']+)["']""")
+                    argPattern.findAll(argsText).forEach { argMatch ->
+                        args[argMatch.groupValues[1]] = argMatch.groupValues[2]
+                    }
+                    
+                    // For single argument tools
+                    if (args.isEmpty() && match.groupValues.size >= 4) {
+                        val key = match.groupValues[2]
+                        val value = match.groupValues[3]
+                        if (key.isNotEmpty() && value.isNotEmpty()) {
+                            args[key] = value
+                        }
+                    }
+                    
+                    if (args.isNotEmpty()) {
+                        val argsJson = buildString {
+                            append("{")
+                            args.entries.forEachIndexed { index, (k, v) ->
+                                if (index > 0) append(", ")
+                                append("\"$k\":\"${v.replace("\"", "\\\"")}\"")
+                            }
+                            append("}")
+                        }
+                        
+                        toolCalls.add(ToolCallRequest(
+                            id = "text_${System.currentTimeMillis()}_${toolCalls.size}",
+                            type = "function",
+                            function = FunctionCallRequest(
+                                name = toolName,
+                                arguments = argsJson
+                            )
+                        ))
+                    }
+                }
+            }
+        }
+        
+        return toolCalls
     }
     
     private fun appendDebug(message: String) {
