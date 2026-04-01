@@ -38,7 +38,6 @@ class OpenRouterApi(
     ): Flow<StreamEvent> = flow {
         val toolDefinitions = tools?.map { it.toToolDefinition() }
         
-        // Build JSON using JsonObject builder to avoid Any serialization issues
         val requestJson = buildJsonObject {
             put("model", modelId)
             put("stream", true)
@@ -51,7 +50,6 @@ class OpenRouterApi(
                         put("role", msg.role)
                         msg.content?.let { put("content", it) }
                         
-                        // Handle tool_calls - must ensure arguments is always a string
                         msg.toolCalls?.let { toolCallsList ->
                             put("tool_calls", buildJsonArray {
                                 toolCallsList.forEach { tc ->
@@ -60,7 +58,6 @@ class OpenRouterApi(
                                         put("type", tc.type)
                                         put("function", buildJsonObject {
                                             put("name", tc.function.name)
-                                            // CRITICAL: arguments must always be a string, even if empty
                                             put("arguments", tc.function.arguments.ifEmpty { "{}" })
                                         })
                                     }
@@ -110,26 +107,10 @@ class OpenRouterApi(
         }.toString()
         
         Log.d(TAG, "═══════════════════════════════════════════")
-        Log.d(TAG, "API Request to: ${Constants.OPENROUTER_BASE_URL}/chat/completions")
-        Log.d(TAG, "Model: $modelId")
-        Log.d(TAG, "Messages: ${messages.size}")
-        Log.d(TAG, "Tools: ${toolDefinitions?.size ?: 0}")
+        Log.d(TAG, "API Request: ${Constants.OPENROUTER_BASE_URL}/chat/completions")
+        Log.d(TAG, "Model: $modelId, Messages: ${messages.size}, Tools: ${toolDefinitions?.size ?: 0}")
         
-        toolDefinitions?.forEach { td ->
-            Log.d(TAG, "  Tool: ${td.function.name} - ${td.function.description?.take(50)}...")
-        }
-        
-        messages.forEachIndexed { index, msg ->
-            val contentPreview = msg.content?.take(50) ?: if (msg.toolCalls != null) "tool_calls(${msg.toolCalls.size})" else "tool_result"
-            Log.d(TAG, "  Msg[$index]: ${msg.role} - $contentPreview...")
-        }
-        
-        Log.d(TAG, "Request JSON length: ${requestJson.length}")
-        
-        val requestBody = RequestBody.create(
-            "application/json".toMediaType(),
-            requestJson
-        )
+        val requestBody = RequestBody.create("application/json".toMediaType(), requestJson)
         
         val httpRequest = Request.Builder()
             .url("${Constants.OPENROUTER_BASE_URL}/chat/completions")
@@ -140,19 +121,18 @@ class OpenRouterApi(
             .post(requestBody)
             .build()
         
-        val toolCalls = mutableMapOf<Int, ToolCallBuilder>()
-        var lastEmittedToolCall = mutableSetOf<String>()
+        // Track tool calls being built
+        val pendingToolCalls = mutableMapOf<Int, ToolCallBuilder>()
+        var lastEmittedToolCallId = mutableSetOf<String>()
         
         client.newCall(httpRequest).execute().use { response ->
             if (!response.isSuccessful) {
                 val errorBody = response.body?.string() ?: "No error body"
-                Log.e(TAG, "API Error: HTTP ${response.code}")
-                Log.e(TAG, "Error body: $errorBody")
+                Log.e(TAG, "API Error: HTTP ${response.code} - $errorBody")
                 emit(StreamEvent.Error("HTTP ${response.code}: $errorBody"))
                 return@use
             }
             
-            Log.d(TAG, "═══════════════════════════════════════════")
             Log.d(TAG, "Stream started successfully")
             
             response.body?.source()?.use { source ->
@@ -167,14 +147,15 @@ class OpenRouterApi(
                     }
                     
                     if (dataLine == "[DONE]") {
-                        Log.d(TAG, "Stream [DONE] received")
+                        Log.d(TAG, "Stream [DONE]")
                         
-                        toolCalls.values.forEach { builder ->
-                            if (builder.isComplete() && builder.id !in lastEmittedToolCall) {
+                        // Emit any remaining tool calls
+                        pendingToolCalls.values.forEach { builder ->
+                            if (builder.id.isNotEmpty() && builder.name.isNotEmpty() && builder.id !in lastEmittedToolCallId) {
                                 val toolCall = builder.build()
-                                Log.d(TAG, "Final tool call: ${toolCall.function.name}")
+                                Log.d(TAG, "Final tool call: ${toolCall.function.name}(${toolCall.function.arguments})")
                                 emit(StreamEvent.ToolCall(toolCall))
-                                lastEmittedToolCall.add(builder.id)
+                                lastEmittedToolCallId.add(builder.id)
                             }
                         }
                         
@@ -184,44 +165,57 @@ class OpenRouterApi(
                     
                     try {
                         val chunk = json.decodeFromString<StreamChunk>(dataLine)
+                        
                         chunk.choices.forEach { choice ->
+                            // Emit content
                             choice.delta.content?.let { content ->
                                 if (content.isNotEmpty()) {
                                     emit(StreamEvent.Content(content))
                                 }
                             }
                             
+                            // Emit reasoning
                             choice.delta.reasoning?.let { reasoning ->
                                 if (reasoning.isNotEmpty()) {
                                     emit(StreamEvent.Content(reasoning))
                                 }
                             }
                             
+                            // Handle tool calls
                             choice.delta.toolCalls?.forEach { deltaToolCall ->
                                 val index = deltaToolCall.index
-                                val builder = toolCalls.getOrPut(index) { ToolCallBuilder() }
+                                val builder = pendingToolCalls.getOrPut(index) { ToolCallBuilder() }
                                 
                                 deltaToolCall.id?.let { 
                                     builder.id = it
+                                    Log.d(TAG, "Tool call id: $it (index: $index)")
                                 }
+                                
                                 deltaToolCall.function?.name?.let { 
                                     builder.name = it
-                                    Log.d(TAG, "Tool name received: $it (index: $index)")
+                                    Log.d(TAG, "Tool name: $it")
                                 }
+                                
                                 deltaToolCall.function?.arguments?.let { args ->
                                     builder.arguments.append(args)
+                                    Log.d(TAG, "Tool args chunk: $args (total: ${builder.arguments.length})")
+                                }
+                                
+                                // Emit when complete (has id, name, and args)
+                                if (builder.id.isNotEmpty() && 
+                                    builder.name.isNotEmpty() && 
+                                    builder.arguments.isNotEmpty() &&
+                                    builder.id !in lastEmittedToolCallId) {
                                     
-                                    if (builder.isComplete() && builder.id !in lastEmittedToolCall) {
-                                        val toolCall = builder.build()
-                                        Log.d(TAG, "Complete tool call: ${toolCall.function.name} with ${toolCall.function.arguments.length} chars args")
-                                        emit(StreamEvent.ToolCall(toolCall))
-                                        lastEmittedToolCall.add(builder.id)
-                                    }
+                                    val toolCall = builder.build()
+                                    Log.d(TAG, "Complete tool call: ${toolCall.function.name}(${toolCall.function.arguments})")
+                                    emit(StreamEvent.ToolCall(toolCall))
+                                    lastEmittedToolCallId.add(builder.id)
                                 }
                             }
                         }
                     } catch (e: Exception) {
-                        Log.e(TAG, "Error parsing chunk: ${dataLine.take(100)}...", e)
+                        Log.e(TAG, "Parse error: ${dataLine.take(100)}", e)
                     }
                 }
             }
@@ -233,14 +227,11 @@ class OpenRouterApi(
         var name: String = "",
         val arguments: StringBuilder = StringBuilder()
     ) {
-        fun isComplete(): Boolean = id.isNotEmpty() && name.isNotEmpty()
-        
         fun build(): ToolCallRequest = ToolCallRequest(
-            id = id,
+            id = id.ifEmpty { "tc_${System.nanoTime()}" },
             type = "function",
             function = FunctionCallRequest(
                 name = name,
-                // Ensure arguments is always a valid JSON string
                 arguments = arguments.toString().ifEmpty { "{}" }
             )
         )

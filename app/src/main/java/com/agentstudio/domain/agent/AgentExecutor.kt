@@ -49,21 +49,17 @@ class AgentExecutor(
                 appendDebug("╚══════════════════════════════════════════╝")
                 appendDebug("📝 User Input: ${userInput.take(100)}...")
                 
-                // Build messages with history
                 val messages = mutableListOf<MessageContent>()
                 
-                // Add system prompt
                 if (systemPrompt.isNotEmpty()) {
                     messages.add(MessageContent(role = "system", content = systemPrompt))
                     appendDebug("📋 System prompt added (${systemPrompt.length} chars)")
                 }
                 
-                // Add conversation history (limit to last 20 messages to avoid context overflow)
                 val recentHistory = conversationHistory.takeLast(20)
                 messages.addAll(recentHistory)
                 appendDebug("📚 History: ${recentHistory.size} messages")
                 
-                // Add current user message
                 val userMessage = MessageContent(role = "user", content = userInput)
                 messages.add(userMessage)
                 conversationHistory.add(userMessage)
@@ -72,7 +68,7 @@ class AgentExecutor(
                 
                 var iteration = 0
                 val maxIterations = 8
-                var consecutiveNoTools = 0
+                var failedToolCalls = 0
                 
                 do {
                     iteration++
@@ -82,7 +78,6 @@ class AgentExecutor(
                     
                     val toolCalls = mutableListOf<ToolCallRequest>()
                     var responseContent = StringBuilder()
-                    var responseComplete = false
                     
                     // Stream the response
                     api.streamChatFlow(messages, AgentTools.ALL_TOOLS).collect { event ->
@@ -93,11 +88,10 @@ class AgentExecutor(
                             }
                             is OpenRouterApi.StreamEvent.ToolCall -> {
                                 appendDebug("🔧 TOOL CALL (API): ${event.toolCall.function.name}")
-                                appendDebug("   Args: ${event.toolCall.function.arguments.take(100)}...")
+                                appendDebug("   Args: ${event.toolCall.function.arguments}")
                                 toolCalls.add(event.toolCall)
                             }
                             is OpenRouterApi.StreamEvent.Complete -> {
-                                responseComplete = true
                                 appendDebug("✅ Stream complete")
                             }
                             is OpenRouterApi.StreamEvent.Error -> {
@@ -110,14 +104,49 @@ class AgentExecutor(
                     
                     val assistantContent = responseContent.toString()
                     
-                    // Check if model wrote tool calls in text instead of using function calling
-                    val textBasedToolCalls = extractToolCallsFromText(assistantContent)
-                    if (textBasedToolCalls.isNotEmpty() && toolCalls.isEmpty()) {
-                        appendDebug("⚠️ Detected tool calls in TEXT (model didn't use function calling)")
-                        textBasedToolCalls.forEach { tc ->
-                            appendDebug("   📝 Parsed: ${tc.function.name} -> ${tc.function.arguments.take(50)}...")
+                    // Process tool calls - fix empty arguments
+                    val validToolCalls = mutableListOf<ToolCallRequest>()
+                    
+                    for (toolCall in toolCalls) {
+                        val toolName = toolCall.function.name
+                        val toolArgs = toolCall.function.arguments
+                        
+                        // Check for empty or invalid arguments
+                        if (toolArgs.isBlank() || toolArgs == "{}" || toolArgs == "{\"\"}") {
+                            appendDebug("⚠️ Empty args for $toolName - trying to extract from text")
+                            
+                            // Try to extract from response content
+                            val extractedArgs = extractArgumentsFromText(assistantContent, toolName, userMessage.content ?: "")
+                            
+                            if (extractedArgs.isNotEmpty()) {
+                                val fixedToolCall = ToolCallRequest(
+                                    id = toolCall.id,
+                                    type = toolCall.type,
+                                    function = FunctionCallRequest(
+                                        name = toolName,
+                                        arguments = extractedArgs
+                                    )
+                                )
+                                validToolCalls.add(fixedToolCall)
+                                appendDebug("✅ Extracted args: $extractedArgs")
+                            } else {
+                                // Send error back to model
+                                val errorMessage = MessageContent(
+                                    role = "tool",
+                                    content = "ERROR: You called '$toolName' but did not provide the required parameters. " +
+                                              "For $toolName, you MUST provide valid JSON arguments. " +
+                                              "Example: {\"path\": \"/storage/emulated/0/Documents/AgentStudioProject/file.txt\"}. " +
+                                              "Do NOT call this tool again without valid arguments.",
+                                    toolCallId = toolCall.id,
+                                    name = toolName
+                                )
+                                messages.add(errorMessage)
+                                conversationHistory.add(errorMessage)
+                                failedToolCalls++
+                            }
+                        } else {
+                            validToolCalls.add(toolCall)
                         }
-                        toolCalls.addAll(textBasedToolCalls)
                     }
                     
                     // Add assistant message to history
@@ -132,29 +161,24 @@ class AgentExecutor(
                         
                         if (assistantContent.isNotEmpty()) {
                             onEvent(ExecutionEvent.ResponseComplete(assistantContent))
-                            appendDebug("💬 Response: ${assistantContent.take(150)}...")
                         }
                     }
                     
-                    // Execute tools if any
-                    if (toolCalls.isNotEmpty()) {
-                        consecutiveNoTools = 0
+                    // Execute valid tool calls
+                    if (validToolCalls.isNotEmpty()) {
                         _state.value = AgentState.ExecutingTools
-                        appendDebug("\n⚡ EXECUTING ${toolCalls.size} TOOL(S)")
+                        appendDebug("\n⚡ EXECUTING ${validToolCalls.size} TOOL(S)")
                         
-                        for (toolCall in toolCalls) {
+                        for (toolCall in validToolCalls) {
                             val toolName = toolCall.function.name
                             val toolArgs = toolCall.function.arguments
                             
                             appendDebug("\n┌─────────────────────────────────────────┐")
                             appendDebug("│ 🛠️  $toolName")
-                            appendDebug("│ Args: ${toolArgs.take(80)}")
+                            appendDebug("│ Args: ${toolArgs.take(100)}")
                             appendDebug("└─────────────────────────────────────────┘")
                             
-                            onEvent(ExecutionEvent.ToolExecutionStarted(
-                                toolCall.id,
-                                toolName
-                            ))
+                            onEvent(ExecutionEvent.ToolExecutionStarted(toolCall.id, toolName))
                             
                             val result = toolHandler.executeTool(toolName, toolArgs)
                             
@@ -165,13 +189,8 @@ class AgentExecutor(
                                 appendDebug("⚠️ Error: ${result.error}")
                             }
                             
-                            onEvent(ExecutionEvent.ToolExecutionComplete(
-                                toolCall.id,
-                                toolName,
-                                result
-                            ))
+                            onEvent(ExecutionEvent.ToolExecutionComplete(toolCall.id, toolName, result))
                             
-                            // Add tool result to conversation
                             val toolMessage = MessageContent(
                                 role = "tool",
                                 content = if (result.success) result.output else "Error: ${result.error}",
@@ -181,27 +200,22 @@ class AgentExecutor(
                             messages.add(toolMessage)
                             conversationHistory.add(toolMessage)
                         }
-                    } else {
-                        consecutiveNoTools++
-                        // If no tools for 2 consecutive iterations, we're done
-                        if (consecutiveNoTools >= 2) {
-                            appendDebug("\n✅ No more tool calls needed")
-                            break
-                        }
+                    }
+                    
+                    // Stop if too many failed tool calls or no tools to execute
+                    if (failedToolCalls >= 3) {
+                        appendDebug("\n⚠️ Too many failed tool calls - stopping")
+                        break
                     }
                     
                     delay(100)
                     
-                } while (toolCalls.isNotEmpty() && iteration < maxIterations)
-                
-                if (iteration >= maxIterations) {
-                    appendDebug("\n⚠️ Max iterations reached!")
-                }
+                } while (validToolCalls.isNotEmpty() && iteration < maxIterations && failedToolCalls < 3)
                 
                 appendDebug("\n╔══════════════════════════════════════════╗")
                 appendDebug("║        EXECUTION COMPLETE                ║")
                 appendDebug("║  Iterations: $iteration")
-                appendDebug("║  History size: ${conversationHistory.size}")
+                appendDebug("║  Failed calls: $failedToolCalls")
                 appendDebug("╚══════════════════════════════════════════╝")
                 
                 _state.value = AgentState.Idle
@@ -210,7 +224,6 @@ class AgentExecutor(
             } catch (e: Exception) {
                 Log.e(TAG, "Execution error", e)
                 appendDebug("\n❌ EXCEPTION: ${e.message}")
-                e.printStackTrace()
                 _state.value = AgentState.Error(e.message ?: "Unknown error")
                 onEvent(ExecutionEvent.Error(e.message ?: "Unknown error"))
             }
@@ -218,79 +231,75 @@ class AgentExecutor(
     }
     
     /**
-     * Extract tool calls from text when model writes them as text instead of using function calling
+     * Extract tool arguments from text or user input context
      */
-    private fun extractToolCallsFromText(text: String): List<ToolCallRequest> {
-        val toolCalls = mutableListOf<ToolCallRequest>()
-        
-        // Patterns to match tool calls in text
-        val patterns = listOf(
-            // read_file(path="...")
-            Regex("""(\w+)\s*\(\s*(\w+)\s*=\s*["']([^"']+)["']\s*\)"""),
-            // read_file(path="...", other="...")
-            Regex("""(\w+)\s*\(\s*(\w+)\s*=\s*["']([^"']+)["'](?:\s*,\s*(\w+)\s*=\s*["']([^"']+)["'])*\s*\)"""),
-            // Multi-line format
-            Regex("""(\w+)\s*\(\s*([\w\s=,",']+)\s*\)""", RegexOption.MULTILINE)
-        )
-        
-        // Known tool names
-        val knownTools = setOf(
-            "create_file", "read_file", "edit_file", "delete_file",
-            "list_directory", "create_directory", "search_files",
-            "web_search", "wiki_search", "image_search", "image_info"
-        )
-        
-        // Try to find tool calls in text
-        for (pattern in patterns) {
-            pattern.findAll(text).forEach { match ->
-                val toolName = match.groupValues[1]
+    private fun extractArgumentsFromText(text: String, toolName: String, userInput: String): String {
+        // Tool-specific extraction based on user input
+        when (toolName) {
+            "read_file" -> {
+                // Look for file paths in user input
+                val pathPattern = Regex("""["']?(/[\w/\-\.]+)["']?""")
+                val matches = pathPattern.findAll(userInput)
+                for (match in matches) {
+                    val path = match.groupValues[1]
+                    if (path.isNotEmpty()) {
+                        return "{\"path\":\"$path\"}"
+                    }
+                }
+                // Look for filename in input
+                val filePattern = Regex("""(\w+\.\w+)""")
+                val fileMatch = filePattern.find(userInput)
+                if (fileMatch != null) {
+                    return "{\"path\":\"/storage/emulated/0/Documents/AgentStudioProject/${fileMatch.value}\"}"
+                }
+            }
+            
+            "list_directory" -> {
+                val pathPattern = Regex("""["']?(/[\w/\-\.]+)["']?""")
+                val match = pathPattern.find(userInput)
+                if (match != null) {
+                    return "{\"path\":\"${match.groupValues[1]}\"}"
+                }
+                return "{\"path\":\"/storage/emulated/0/Documents/AgentStudioProject\"}"
+            }
+            
+            "image_search" -> {
+                // Extract tags from user input
+                val tagsWords = mutableListOf<String>()
                 
-                if (toolName in knownTools) {
-                    // Build arguments JSON from the match
-                    val args = mutableMapOf<String, String>()
-                    
-                    // Parse key=value pairs
-                    val argsText = match.groupValues.getOrNull(2) ?: ""
-                    
-                    // Simple parsing for key="value" or key='value'
-                    val argPattern = Regex("""(\w+)\s*=\s*["']([^"']+)["']""")
-                    argPattern.findAll(argsText).forEach { argMatch ->
-                        args[argMatch.groupValues[1]] = argMatch.groupValues[2]
-                    }
-                    
-                    // For single argument tools
-                    if (args.isEmpty() && match.groupValues.size >= 4) {
-                        val key = match.groupValues[2]
-                        val value = match.groupValues[3]
-                        if (key.isNotEmpty() && value.isNotEmpty()) {
-                            args[key] = value
-                        }
-                    }
-                    
-                    if (args.isNotEmpty()) {
-                        val argsJson = buildString {
-                            append("{")
-                            args.entries.forEachIndexed { index, (k, v) ->
-                                if (index > 0) append(", ")
-                                append("\"$k\":\"${v.replace("\"", "\\\"")}\"")
-                            }
-                            append("}")
-                        }
-                        
-                        toolCalls.add(ToolCallRequest(
-                            id = "text_${System.currentTimeMillis()}_${toolCalls.size}",
-                            type = "function",
-                            function = FunctionCallRequest(
-                                name = toolName,
-                                arguments = argsJson
-                            )
-                        ))
-                    }
+                // Common words to exclude
+                val excludeWords = setOf("search", "find", "image", "images", "picture", "pictures", "photo", "with", "tags", "tagged", "show", "me", "the", "a", "an", "for", "of", "and", "or")
+                
+                userInput.lowercase().split(Regex("\\s+"))
+                    .filter { it.length > 2 && it !in excludeWords }
+                    .forEach { tagsWords.add(it) }
+                
+                if (tagsWords.isNotEmpty()) {
+                    return "{\"tags\":\"${tagsWords.joinToString(" ")}\",\"limit\":10,\"rating\":\"safe\"}"
+                }
+            }
+            
+            "web_search", "wiki_search" -> {
+                // Extract search query from user input
+                val queryWords = userInput.split(Regex("\\s+"))
+                    .filter { it.length > 2 }
+                    .filter { it.lowercase() !in setOf("search", "find", "web", "wiki", "wikipedia", "for", "about", "the", "me") }
+                
+                if (queryWords.isNotEmpty()) {
+                    return "{\"query\":\"${queryWords.joinToString(" ")}\",\"max_results\":10}"
+                }
+            }
+            
+            "create_file" -> {
+                val filePattern = Regex("""(\w+\.\w+)""")
+                val fileMatch = filePattern.find(userInput)
+                if (fileMatch != null) {
+                    return "{\"path\":\"/storage/emulated/0/Documents/AgentStudioProject/${fileMatch.value}\",\"content\":\"\"}"
                 }
             }
         }
         
-        return toolCalls
+        return ""
     }
     
     private fun appendDebug(message: String) {
