@@ -16,12 +16,35 @@ android {
         applicationId = "com.agentstudio"
         minSdk = 26
         targetSdk = 34
-        versionCode = 2
-        versionName = "3.5.0"
+        versionCode = 3
+        versionName = "3.6.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
             useSupportLibrary = true
+        }
+
+        // NDK configuration for llama.cpp
+        ndk {
+            abiFilters += listOf("arm64-v8a", "armeabi-v7a")
+        }
+
+        externalNativeBuild {
+            cmake {
+                cppFlags += "-std=c++17"
+                arguments += listOf(
+                    "-DANDROID_STL=c++_shared",
+                    "-DANDROID_TOOLCHAIN=clang"
+                )
+            }
+        }
+    }
+
+    // External native build configuration
+    externalNativeBuild {
+        cmake {
+            path = file("src/main/cpp/CMakeLists.txt")
+            version = "3.22.1"
         }
     }
 

@@ -1,0 +1,193 @@
+name: Build Native Libraries and APK
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+    inputs:
+      release:
+        description: 'Create release'
+        required: false
+        default: 'true'
+
+env:
+  NDK_VERSION: r26d
+  CMAKE_VERSION: 3.22.1
+
+jobs:
+  build-native:
+    name: Build Native Libraries
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        abi: [arm64-v8a, armeabi-v7a]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install NDK and CMake
+        run: |
+          sdkmanager --install "ndk;${{ env.NDK_VERSION }}" "cmake;${{ env.CMAKE_VERSION }}"
+
+      - name: Clone llama.cpp
+        run: |
+          cd app/src/main/cpp
+          git clone --depth 1 https://github.com/ggerganov/llama.cpp.git
+
+      - name: Build native library for ${{ matrix.abi }}
+        run: |
+          cd app/src/main/cpp
+          mkdir -p build-${{ matrix.abi }}
+          cd build-${{ matrix.abi }}
+
+          $ANDROID_HOME/cmake/${{ env.CMAKE_VERSION }}/bin/cmake \
+            -DCMAKE_TOOLCHAIN_FILE=$ANDROID_HOME/ndk/${{ env.NDK_VERSION }}/build/cmake/android.toolchain.cmake \
+            -DANDROID_ABI=${{ matrix.abi }} \
+            -DANDROID_PLATFORM=android-26 \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DANDROID_STL=c++_shared \
+            ..
+
+          make -j$(nproc)
+
+      - name: Upload native library
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-${{ matrix.abi }}
+          path: app/src/main/cpp/build-${{ matrix.abi }}/libllama-android.so
+
+  build-apk:
+    name: Build APK
+    needs: build-native
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Download arm64-v8a library
+        uses: actions/download-artifact@v4
+        with:
+          name: native-arm64-v8a
+          path: app/src/main/jniLibs/arm64-v8a
+
+      - name: Download armeabi-v7a library
+        uses: actions/download-artifact@v4
+        with:
+          name: native-armeabi-v7a
+          path: app/src/main/jniLibs/armeabi-v7a
+
+      - name: Make gradlew executable
+        run: chmod +x gradlew
+
+      - name: Build Release APK (without native build)
+        run: |
+          # Create a dummy CMakeLists.txt to skip native build in gradle
+          mkdir -p app/src/main/cpp
+          echo 'cmake_minimum_required(VERSION 3.22.1)
+          project(dummy)
+          # Pre-built libraries - no native build needed' > app/src/main/cpp/CMakeLists.txt
+
+          ./gradlew assembleRelease --no-daemon
+
+      - name: Sign APK
+        if: github.event.inputs.release == 'true' || github.event_name == 'push'
+        run: |
+          # Create keystore
+          keytool -genkeypair -v -keystore release.keystore \
+            -alias agentstudio \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 10000 \
+            -storepass agentstudio123 \
+            -keypass agentstudio123 \
+            -dname "CN=AgentStudio, OU=Dev, O=AgentStudio, L=City, ST=State, C=US"
+
+          # Sign APK
+          $ANDROID_HOME/build-tools/34.0.0/apksigner sign \
+            --ks release.keystore \
+            --ks-pass pass:agentstudio123 \
+            --key-pass pass:agentstudio123 \
+            --ks-key-alias agentstudio \
+            --out app/build/outputs/apk/release/app-release-signed.apk \
+            app/build/outputs/apk/release/app-release-unsigned.apk
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-release
+          path: app/build/outputs/apk/release/app-release-signed.apk
+
+  release:
+    name: Create Release
+    needs: build-apk
+    runs-on: ubuntu-latest
+    if: github.event.inputs.release == 'true' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download APK
+        uses: actions/download-artifact@v4
+        with:
+          name: app-release
+          path: ./release
+
+      - name: Get version
+        id: version
+        run: |
+          VERSION=$(grep "versionName" app/build.gradle.kts | head -1 | sed 's/.*versionName = "\([^"]*\)".*/\1/')
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: v${{ steps.version.outputs.version }}
+          name: Release v${{ steps.version.outputs.version }}
+          body: |
+            ## AgentStudio v${{ steps.version.outputs.version }}
+
+            ### New Features
+            - 🤖 Local AI inference with llama.cpp
+            - 📱 Support for GGUF models
+            - 🔄 Model download and management
+
+            ### Included
+            - APK with native libraries (arm64-v8a, armeabi-v7a)
+            - OpenRouter API integration
+            - Agent tools (file management, web search, image search)
+
+            ### How to use Local AI
+            1. Download a GGUF model (recommended: Qwen 2.5 1.5B)
+            2. Place it in: /storage/emulated/0/Android/data/com.agentstudio/files/models/
+            3. Select the model in Settings
+            4. Start chatting!
+
+          files: |
+            release/app-release-signed.apk
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
