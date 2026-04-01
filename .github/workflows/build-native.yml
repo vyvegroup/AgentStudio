@@ -12,6 +12,10 @@ on:
         required: false
         default: 'true'
 
+permissions:
+  contents: write
+  actions: read
+
 jobs:
   build-apk:
     name: Build APK
