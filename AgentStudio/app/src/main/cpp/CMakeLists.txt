@@ -24,15 +24,16 @@ endif()
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -fPIC -fvisibility=hidden")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O3 -fPIC -fvisibility=hidden")
 
-# llama.cpp options
+# llama.cpp options - build as static library
 set(GGML_NATIVE OFF CACHE BOOL "" FORCE)
 set(GGML_CUBLAS OFF CACHE BOOL "" FORCE)
 set(GGML_OPENBLAS OFF CACHE BOOL "" FORCE)
 set(GGML_METAL OFF CACHE BOOL "" FORCE)
-set(GGML_LLAMAFILE OFF CACHE BOOL "" FORCE)  # Disable llamafile to avoid FP16 issues
+set(GGML_LLAMAFILE OFF CACHE BOOL "" FORCE)
 set(LLAMA_CURL OFF CACHE BOOL "" FORCE)
-set(BUILD_SHARED_LIBS ON CACHE BOOL "" FORCE)
+set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)  # Build static libs
 set(LLAMA_BUILD_COMMON OFF CACHE BOOL "" FORCE)
+set(LLAMA_STATIC ON CACHE BOOL "" FORCE)
 
 # Add llama.cpp subdirectory
 add_subdirectory(${LLAMA_DIR} llama_build EXCLUDE_FROM_ALL)
@@ -48,8 +49,12 @@ target_include_directories(llama-android PRIVATE
     ${CMAKE_SOURCE_DIR}
 )
 
-# Link only with llama (not common)
-target_link_libraries(llama-android llama log android)
+# Link with static llama library and log/android
+target_link_libraries(llama-android 
+    llama  # This will link statically
+    log 
+    android
+)
 
 # Define for Android
 target_compile_definitions(llama-android PRIVATE GGML_USE_CPU ANDROID LLAMA_CPP_AVAILABLE)
