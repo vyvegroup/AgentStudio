@@ -10,8 +10,7 @@
 #include <cmath>
 #include <unistd.h>
 
-// Only compile llama.cpp code if available
-#ifdef LLAMA_CPP_AVAILABLE
+// llama.cpp headers
 #include "llama.h"
 #include "common.h"
 #include "sampling.h"
@@ -43,8 +42,6 @@ struct ModelContext {
     int nCtx = DEFAULT_CONTEXT_SIZE;
     int nVocab = 0;
     int nThreads = 2;
-    llama_pos current_position = 0;
-    std::vector<common_chat_msg> chat_msgs;
 };
 
 static ModelContext* g_context = nullptr;
@@ -82,8 +79,8 @@ Java_com_agentstudio_data_local_LlamaJNI_nativeLoadModel(JNIEnv* env, jobject th
     // Model parameters
     llama_model_params model_params = llama_model_default_params();
 
-    // Load model
-    llama_model* model = llama_load_model_from_file(pathStr.c_str(), model_params);
+    // Load model - use new API
+    llama_model* model = llama_model_load_from_file(pathStr.c_str(), model_params);
     if (!model) {
         LOGE("Failed to load model from %s", pathStr.c_str());
         return 0;
@@ -101,11 +98,11 @@ Java_com_agentstudio_data_local_LlamaJNI_nativeLoadModel(JNIEnv* env, jobject th
     ctx_params.n_threads = nThreads;
     ctx_params.n_threads_batch = nThreads;
 
-    // Create context
-    llama_context* ctx = llama_new_context_with_model(model, ctx_params);
+    // Create context - use new API
+    llama_context* ctx = llama_init_from_model(model, ctx_params);
     if (!ctx) {
         LOGE("Failed to create context");
-        llama_free_model(model);
+        llama_model_free(model);
         return 0;
     }
 
@@ -145,7 +142,7 @@ Java_com_agentstudio_data_local_LlamaJNI_nativeFreeModel(JNIEnv* env, jobject th
             llama_free(mc->ctx);
         }
         if (mc->model) {
-            llama_free_model(mc->model);
+            llama_model_free(mc->model);
         }
         delete mc;
         if (g_context == mc) {
@@ -219,14 +216,15 @@ Java_com_agentstudio_data_local_LlamaJNI_nativeGenerate(
 
     LOGD("Tokenized to %zu tokens", tokens.size());
 
-    // Clear KV cache
-    llama_kv_cache_clear(mc->ctx);
+    // Clear KV cache - use new API
+    llama_memory_clear(llama_get_memory(mc->ctx), false);
 
-    // Decode prompt in batches
+    // Decode prompt in batches using new batch API
     for (size_t i = 0; i < tokens.size(); i += BATCH_SIZE) {
         size_t batch_size = std::min(tokens.size() - i, (size_t)BATCH_SIZE);
 
-        llama_batch batch = llama_batch_get_one(tokens.data() + i, batch_size, i, 0);
+        // Use new batch API with 2 arguments
+        llama_batch batch = llama_batch_get_one(tokens.data() + i, batch_size);
 
         if (llama_decode(mc->ctx, batch) != 0) {
             LOGE("Failed to decode prompt batch at index %zu", i);
@@ -236,7 +234,7 @@ Java_com_agentstudio_data_local_LlamaJNI_nativeGenerate(
 
     // Generation
     std::string result;
-    llama_pos current_pos = tokens.size();
+    int current_pos = tokens.size();
 
     for (int i = 0; i < maxTokens; i++) {
         // Sample next token
@@ -254,7 +252,7 @@ Java_com_agentstudio_data_local_LlamaJNI_nativeGenerate(
         result += tokenStr;
 
         // Decode for next iteration
-        llama_batch batch = llama_batch_get_one(&nextToken, 1, current_pos, 0);
+        llama_batch batch = llama_batch_get_one(&nextToken, 1);
         if (llama_decode(mc->ctx, batch) != 0) {
             LOGE("Failed to decode generated token");
             break;
@@ -281,58 +279,3 @@ Java_com_agentstudio_data_local_LlamaJNI_nativeGetContextSize(JNIEnv* env, jobje
 }
 
 } // extern "C"
-
-#else
-// Fallback when llama.cpp is not available
-#define LOG_TAG "llama-android"
-#define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
-
-extern "C" {
-
-JNIEXPORT jboolean JNICALL
-Java_com_agentstudio_data_local_LlamaJNI_nativeInit(JNIEnv* env, jobject thiz) {
-    LOGI("Native library loaded but llama.cpp not compiled in");
-    return JNI_FALSE;
-}
-
-JNIEXPORT jlong JNICALL
-Java_com_agentstudio_data_local_LlamaJNI_nativeLoadModel(JNIEnv* env, jobject thiz, jstring modelPath) {
-    return 0;
-}
-
-JNIEXPORT void JNICALL
-Java_com_agentstudio_data_local_LlamaJNI_nativeFreeModel(JNIEnv* env, jobject thiz, jlong contextPtr) {
-}
-
-JNIEXPORT jstring JNICALL
-Java_com_agentstudio_data_local_LlamaJNI_nativeGetModelInfo(JNIEnv* env, jobject thiz, jlong contextPtr) {
-    return env->NewStringUTF("llama.cpp not compiled");
-}
-
-JNIEXPORT jstring JNICALL
-Java_com_agentstudio_data_local_LlamaJNI_nativeGenerate(
-    JNIEnv* env, jobject thiz,
-    jlong contextPtr,
-    jstring prompt,
-    jint maxTokens,
-    jfloat temperature,
-    jfloat topP,
-    jint topK,
-    jlong seed
-) {
-    return env->NewStringUTF("llama.cpp not available");
-}
-
-JNIEXPORT jint JNICALL
-Java_com_agentstudio_data_local_LlamaJNI_nativeGetVocabSize(JNIEnv* env, jobject thiz, jlong contextPtr) {
-    return 0;
-}
-
-JNIEXPORT jint JNICALL
-Java_com_agentstudio_data_local_LlamaJNI_nativeGetContextSize(JNIEnv* env, jobject thiz, jlong contextPtr) {
-    return 0;
-}
-
-} // extern "C"
-
-#endif // LLAMA_CPP_AVAILABLE
