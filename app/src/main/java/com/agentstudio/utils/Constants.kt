@@ -4,32 +4,32 @@ object Constants {
     // API Configuration
     const val OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
     
-    // Available Models - Models with good function calling support
+    // Available Models - ONLY FREE MODELS (no credit limit issues)
     val AVAILABLE_MODELS = listOf(
         ModelOption(
-            id = "qwen/qwen-2.5-7b-instruct:free",
-            name = "Qwen 2.5 7B",
-            description = "Excellent function calling, recommended"
+            id = "stepfun/step-3.5-flash:free",
+            name = "Step 3.5 Flash",
+            description = "Fast, free model with function calling"
         ),
         ModelOption(
-            id = "google/gemma-3-1b-it:free",
-            name = "Gemma 3 1B",
-            description = "Fast, good for simple tasks"
+            id = "qwen/qwen3.6-plus-preview:free",
+            name = "Qwen 3.6 Plus",
+            description = "Powerful reasoning, multilingual"
         ),
         ModelOption(
-            id = "meta-llama/llama-3.2-3b-instruct:free",
-            name = "Llama 3.2 3B",
-            description = "Good reasoning, function calling"
+            id = "z-ai/glm-4.5-air:free",
+            name = "GLM 4.5 Air",
+            description = "Z.AI's free model"
         )
     )
     
-    // Default model - Qwen has best function calling
-    const val MODEL_ID = "qwen/qwen-2.5-7b-instruct:free"
+    // Default model
+    const val MODEL_ID = "stepfun/step-3.5-flash:free"
     
     // App Info
     const val APP_NAME = "AgentStudio"
     const val APP_REFERER = "https://agentstudio.app"
-    const val APP_VERSION = "3.7.0"
+    const val APP_VERSION = "3.7.1"
     
     // Default Project Directory
     const val DEFAULT_PROJECT_DIR = "/storage/emulated/0/Documents/AgentStudioProject"
