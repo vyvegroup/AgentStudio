@@ -1,4 +1,4 @@
-name: Build Native Libraries and APK
+name: Build APK
 
 on:
   push:
@@ -13,66 +13,8 @@ on:
         default: 'true'
 
 jobs:
-  build-native:
-    name: Build Native Libraries
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        abi: [arm64-v8a, armeabi-v7a]
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Set up JDK 17
-        uses: actions/setup-java@v4
-        with:
-          java-version: '17'
-          distribution: 'temurin'
-
-      - name: Setup Android SDK with NDK
-        uses: android-actions/setup-android@v3
-        with:
-          packages: 'ndk;26.3.11579264 cmake;3.22.1'
-
-      - name: Clone llama.cpp
-        run: |
-          cd app/src/main/cpp
-          git clone --depth 1 https://github.com/ggerganov/llama.cpp.git
-
-      - name: Get NDK path
-        id: ndk
-        run: |
-          NDK_PATH=$(ls -d $ANDROID_HOME/ndk/*/ | head -1)
-          echo "ndk_path=$NDK_PATH" >> $GITHUB_OUTPUT
-          CMAKE_PATH=$(ls -d $ANDROID_HOME/cmake/*/bin | head -1)
-          echo "cmake_path=$CMAKE_PATH" >> $GITHUB_OUTPUT
-
-      - name: Build native library for ${{ matrix.abi }}
-        run: |
-          cd app/src/main/cpp
-          mkdir -p build-${{ matrix.abi }}
-          cd build-${{ matrix.abi }}
-
-          ${{ steps.ndk.outputs.cmake_path }}/cmake \
-            -DCMAKE_TOOLCHAIN_FILE=${{ steps.ndk.outputs.ndk_path }}build/cmake/android.toolchain.cmake \
-            -DANDROID_ABI=${{ matrix.abi }} \
-            -DANDROID_PLATFORM=android-26 \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DANDROID_STL=c++_shared \
-            ..
-
-          make -j$(nproc)
-
-      - name: Upload native library
-        uses: actions/upload-artifact@v4
-        with:
-          name: native-${{ matrix.abi }}
-          path: app/src/main/cpp/build-${{ matrix.abi }}/libllama-android.so
-
   build-apk:
     name: Build APK
-    needs: build-native
     runs-on: ubuntu-latest
 
     steps:
@@ -88,36 +30,14 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Download arm64-v8a library
-        uses: actions/download-artifact@v4
-        with:
-          name: native-arm64-v8a
-          path: app/src/main/jniLibs/arm64-v8a
-
-      - name: Download armeabi-v7a library
-        uses: actions/download-artifact@v4
-        with:
-          name: native-armeabi-v7a
-          path: app/src/main/jniLibs/armeabi-v7a
-
-      - name: List downloaded libraries
-        run: ls -la app/src/main/jniLibs/*/
-
       - name: Make gradlew executable
         run: chmod +x gradlew
 
-      - name: Build Release APK (without native build)
+      - name: Build Release APK
         run: |
-          # Create a dummy CMakeLists.txt to skip native build in gradle
-          mkdir -p app/src/main/cpp
-          echo 'cmake_minimum_required(VERSION 3.22.1)
-          project(dummy)
-          # Pre-built libraries - no native build needed' > app/src/main/cpp/CMakeLists.txt
-
           ./gradlew assembleRelease --no-daemon
 
       - name: Sign APK
-        if: github.event.inputs.release == 'true' || github.event_name == 'push'
         run: |
           # Create keystore
           keytool -genkeypair -v -keystore release.keystore \
@@ -177,21 +97,23 @@ jobs:
           body: |
             ## AgentStudio v${{ steps.version.outputs.version }}
 
-            ### New Features
-            - 🤖 Local AI inference with llama.cpp
-            - 📱 Support for GGUF models
-            - 🔄 Model download and management
-
-            ### Included
-            - APK with native libraries (arm64-v8a, armeabi-v7a)
-            - OpenRouter API integration
-            - Agent tools (file management, web search, image search)
+            ### Features
+            - 🤖 Cloud AI with OpenRouter API
+            - 📁 File management tools
+            - 🌐 Web search capability
+            - 🖼️ Image search (Gelbooru)
+            - 🔧 Local AI support (requires manual GGUF model placement)
 
             ### How to use Local AI
-            1. Download a GGUF model (recommended: Qwen 2.5 1.5B)
+            1. Download a GGUF model (recommended: Qwen 2.5 1.5B Instruct)
             2. Place it in: /storage/emulated/0/Android/data/com.agentstudio/files/models/
-            3. Select the model in Settings
-            4. Start chatting!
+            3. Go to Settings → Local AI section
+            4. Select and load the model
+
+            ### Cloud Models Available
+            - Step 3.5 Flash (free)
+            - Qwen 3.6 Plus (free)
+            - GLM 4.5 Air (free)
 
           files: |
             release/app-release-signed.apk

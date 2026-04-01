@@ -23,30 +23,16 @@ android {
         vectorDrawables {
             useSupportLibrary = true
         }
-
-        // NDK configuration for llama.cpp
-        ndk {
-            abiFilters += listOf("arm64-v8a", "armeabi-v7a")
-        }
-
-        externalNativeBuild {
-            cmake {
-                cppFlags += "-std=c++17"
-                arguments += listOf(
-                    "-DANDROID_STL=c++_shared",
-                    "-DANDROID_TOOLCHAIN=clang"
-                )
-            }
-        }
     }
 
-    // External native build configuration
-    externalNativeBuild {
-        cmake {
-            path = file("src/main/cpp/CMakeLists.txt")
-            version = "3.22.1"
-        }
-    }
+    // Native build configuration - disabled for now, will be enabled when native libs are ready
+    // To enable native build, uncomment the following block and ensure CMakeLists.txt is correct
+    // externalNativeBuild {
+    //     cmake {
+    //         path = file("src/main/cpp/CMakeLists.txt")
+    //         version = "3.22.1"
+    //     }
+    // }
 
     buildTypes {
         release {
