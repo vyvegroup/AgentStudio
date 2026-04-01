@@ -49,15 +49,12 @@ jobs:
             -DANDROID_PLATFORM=android-26 \
             -DANDROID_STL=c++_static \
             -DCMAKE_BUILD_TYPE=Release \
-            -DLLAMA_NATIVE=OFF \
-            -DLLAMA_CUBLAS=OFF \
-            -DLLAMA_OPENBLAS=OFF \
-            -DLLAMA_METAL=OFF \
-            -DLLAMA_LLAMAFILE=OFF \
-            -DBUILD_SHARED_LIBS=ON \
             ../..
 
           cmake --build . --config Release -j$(nproc)
+          
+          echo "=== Built files ==="
+          ls -la *.so 2>/dev/null || ls -la
 
       - name: Build native library for armeabi-v7a
         run: |
@@ -73,15 +70,15 @@ jobs:
             -DANDROID_PLATFORM=android-26 \
             -DANDROID_STL=c++_static \
             -DCMAKE_BUILD_TYPE=Release \
-            -DLLAMA_NATIVE=OFF \
-            -DLLAMA_CUBLAS=OFF \
-            -DLLAMA_OPENBLAS=OFF \
-            -DLLAMA_METAL=OFF \
-            -DLLAMA_LLAMAFILE=OFF \
-            -DBUILD_SHARED_LIBS=ON \
             ../..
 
           cmake --build . --config Release -j$(nproc)
+
+      - name: Check library dependencies
+        run: |
+          echo "=== Checking arm64-v8a library dependencies ==="
+          readelf -d AgentStudio/app/src/main/cpp/build/arm64-v8a/libllama-android.so 2>/dev/null | grep NEEDED || echo "Checking alternative location..."
+          find AgentStudio/app/src/main/cpp/build -name "*.so" -exec readelf -d {} \; 2>/dev/null | grep NEEDED || true
 
       - name: Copy native libraries
         run: |
@@ -90,6 +87,9 @@ jobs:
 
           cp AgentStudio/app/src/main/cpp/build/arm64-v8a/libllama-android.so AgentStudio/app/src/main/jniLibs/arm64-v8a/ 2>/dev/null || true
           cp AgentStudio/app/src/main/cpp/build/armeabi-v7a/libllama-android.so AgentStudio/app/src/main/jniLibs/armeabi-v7a/ 2>/dev/null || true
+          
+          echo "=== Final libraries ==="
+          ls -la AgentStudio/app/src/main/jniLibs/*/
 
       - name: Upload native libraries artifact
         uses: actions/upload-artifact@v4
@@ -132,41 +132,3 @@ jobs:
         with:
           name: venai-release-apk
           path: AgentStudio/app/build/outputs/apk/release/*.apk
-
-  create-release:
-    needs: build-apk
-    runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch'
-
-    steps:
-      - name: Download APK
-        uses: actions/download-artifact@v4
-        with:
-          name: venai-release-apk
-          path: ./apk
-
-      - name: Get version
-        id: version
-        run: |
-          VERSION=$(date +%Y.%m.%d)
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-
-      - name: Create Release
-        uses: softprops/action-gh-release@v1
-        with:
-          tag_name: v${{ steps.version.outputs.version }}
-          name: VenAI ${{ steps.version.outputs.version }}
-          body: |
-            ## VenAI Local AI Edition
-
-            ### Features
-            - Local AI inference with llama.cpp
-            - Real GGUF model support
-            - Offline AI capabilities
-
-            ### Included
-            - arm64-v8a native library
-            - armeabi-v7a native library
-          files: ./apk/*.apk
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
