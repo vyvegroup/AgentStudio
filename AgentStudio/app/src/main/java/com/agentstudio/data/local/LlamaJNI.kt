@@ -117,10 +117,6 @@ object LlamaJNI {
 
             return nativeGenerate(ptr, prompt, maxTokens, temperature, topP, topK, seed)
         }
-
-        override fun finalize() {
-            free()
-        }
     }
 
     /**
