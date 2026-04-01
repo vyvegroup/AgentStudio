@@ -36,6 +36,7 @@ constexpr float DEFAULT_TEMP = 0.7f;
 struct ModelContext {
     llama_model* model = nullptr;
     llama_context* ctx = nullptr;
+    const llama_vocab* vocab = nullptr;
     std::string modelPath;
     int nCtx = DEFAULT_CONTEXT_SIZE;
     int nVocab = 0;
@@ -45,12 +46,12 @@ struct ModelContext {
 static ModelContext* g_context = nullptr;
 
 // Simple tokenization using llama API
-static std::vector<llama_token> tokenize_simple(llama_context* ctx, const std::string& text, bool add_bos) {
+static std::vector<llama_token> tokenize_simple(const llama_vocab* vocab, const std::string& text, bool add_bos) {
     std::vector<llama_token> tokens;
     tokens.resize(text.size() + 1); // Upper bound
     
     int n_tokens = llama_tokenize(
-        llama_get_model(ctx),
+        vocab,
         text.c_str(),
         text.size(),
         tokens.data(),
@@ -69,12 +70,12 @@ static std::vector<llama_token> tokenize_simple(llama_context* ctx, const std::s
 }
 
 // Simple token to text conversion
-static std::string token_to_text(llama_context* ctx, llama_token token) {
+static std::string token_to_text(const llama_vocab* vocab, llama_token token) {
     std::string result;
     result.resize(16); // Most tokens are small
     
     int n = llama_token_to_piece(
-        llama_get_model(ctx),
+        vocab,
         token,
         result.data(),
         result.size(),
@@ -92,10 +93,10 @@ static std::string token_to_text(llama_context* ctx, llama_token token) {
 }
 
 // Simple sampling with temperature
-static llama_token sample_token(llama_context* ctx, float temp, uint32_t seed) {
+static llama_token sample_token(llama_context* ctx, const llama_vocab* vocab, float temp, uint32_t seed) {
     // Get logits
     float* logits = llama_get_logits(ctx);
-    int n_vocab = llama_vocab_n_tokens(llama_get_model(ctx));
+    int n_vocab = llama_vocab_n_tokens(vocab);
     
     // Simple temperature sampling
     std::vector<float> probs(n_vocab);
@@ -176,6 +177,14 @@ Java_com_agentstudio_data_local_LlamaJNI_nativeLoadModel(JNIEnv* env, jobject th
         return 0;
     }
 
+    // Get vocab from model
+    const llama_vocab* vocab = llama_model_get_vocab(model);
+    if (!vocab) {
+        LOGE("Failed to get vocab from model");
+        llama_model_free(model);
+        return 0;
+    }
+
     // Calculate threads
     int nThreads = std::max(N_THREADS_MIN,
         std::min(N_THREADS_MAX, (int)sysconf(_SC_NPROCESSORS_ONLN) - N_THREADS_HEADROOM));
@@ -200,9 +209,10 @@ Java_com_agentstudio_data_local_LlamaJNI_nativeLoadModel(JNIEnv* env, jobject th
     ModelContext* mc = new ModelContext();
     mc->model = model;
     mc->ctx = ctx;
+    mc->vocab = vocab;
     mc->modelPath = pathStr;
     mc->nCtx = ctx_params.n_ctx;
-    mc->nVocab = llama_vocab_n_tokens(llama_model_get_vocab(model));
+    mc->nVocab = llama_vocab_n_tokens(vocab);
     mc->nThreads = nThreads;
 
     g_context = mc;
@@ -280,8 +290,8 @@ Java_com_agentstudio_data_local_LlamaJNI_nativeGenerate(
 
     LOGD("Generating with prompt length: %zu, maxTokens: %d", promptStr.length(), maxTokens);
 
-    // Tokenize prompt
-    std::vector<llama_token> tokens = tokenize_simple(mc->ctx, promptStr, true);
+    // Tokenize prompt using vocab
+    std::vector<llama_token> tokens = tokenize_simple(mc->vocab, promptStr, true);
 
     LOGD("Tokenized to %zu tokens", tokens.size());
 
@@ -310,16 +320,16 @@ Java_com_agentstudio_data_local_LlamaJNI_nativeGenerate(
 
     for (int i = 0; i < maxTokens; i++) {
         // Sample next token
-        llama_token nextToken = sample_token(mc->ctx, temp, useed + i);
+        llama_token nextToken = sample_token(mc->ctx, mc->vocab, temp, useed + i);
 
         // Check for EOS
-        if (llama_vocab_is_eog(llama_model_get_vocab(mc->model), nextToken)) {
+        if (llama_vocab_is_eog(mc->vocab, nextToken)) {
             LOGD("Reached EOS token at position %d", i);
             break;
         }
 
         // Convert to text
-        std::string tokenStr = token_to_text(mc->ctx, nextToken);
+        std::string tokenStr = token_to_text(mc->vocab, nextToken);
         result += tokenStr;
 
         // Decode for next iteration
