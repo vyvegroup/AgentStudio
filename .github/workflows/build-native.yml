@@ -53,6 +53,7 @@ jobs:
             -DLLAMA_CUBLAS=OFF \
             -DLLAMA_OPENBLAS=OFF \
             -DLLAMA_METAL=OFF \
+            -DLLAMA_LLAMAFILE=OFF \
             -DBUILD_SHARED_LIBS=ON \
             ../..
 
@@ -76,6 +77,7 @@ jobs:
             -DLLAMA_CUBLAS=OFF \
             -DLLAMA_OPENBLAS=OFF \
             -DLLAMA_METAL=OFF \
+            -DLLAMA_LLAMAFILE=OFF \
             -DBUILD_SHARED_LIBS=ON \
             ../..
 
