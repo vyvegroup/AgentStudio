@@ -29,7 +29,7 @@ object Constants {
     // App Info
     const val APP_NAME = "AgentStudio"
     const val APP_REFERER = "https://agentstudio.app"
-    const val APP_VERSION = "3.7.1"
+    const val APP_VERSION = "3.7.2"
     
     // Default Project Directory
     const val DEFAULT_PROJECT_DIR = "/storage/emulated/0/Documents/AgentStudioProject"

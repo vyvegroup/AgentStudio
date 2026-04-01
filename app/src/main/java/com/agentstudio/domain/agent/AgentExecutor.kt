@@ -149,12 +149,12 @@ class AgentExecutor(
                         }
                     }
                     
-                    // Add assistant message to history
-                    if (assistantContent.isNotEmpty() || toolCalls.isNotEmpty()) {
+                    // Add assistant message to history (only include valid tool calls)
+                    if (assistantContent.isNotEmpty() || validToolCalls.isNotEmpty()) {
                         val assistantMessage = MessageContent(
                             role = "assistant",
                             content = assistantContent.ifEmpty { null },
-                            toolCalls = if (toolCalls.isNotEmpty()) toolCalls else null
+                            toolCalls = if (validToolCalls.isNotEmpty()) validToolCalls else null
                         )
                         messages.add(assistantMessage)
                         conversationHistory.add(assistantMessage)

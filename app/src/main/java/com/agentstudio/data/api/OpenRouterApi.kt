@@ -58,7 +58,16 @@ class OpenRouterApi(
                                         put("type", tc.type)
                                         put("function", buildJsonObject {
                                             put("name", tc.function.name)
-                                            put("arguments", tc.function.arguments.ifEmpty { "{}" })
+                                            // Ensure arguments is valid JSON string
+                                            val args = tc.function.arguments.ifEmpty { "{}" }
+                                            val validatedArgs = try {
+                                                Json.parseToJsonElement(args)
+                                                args
+                                            } catch (e: Exception) {
+                                                Log.w(TAG, "Invalid tool args in request, using empty: ${args.take(50)}")
+                                                "{}"
+                                            }
+                                            put("arguments", validatedArgs)
                                         })
                                     }
                                 }
@@ -232,9 +241,49 @@ class OpenRouterApi(
             type = "function",
             function = FunctionCallRequest(
                 name = name,
-                arguments = arguments.toString().ifEmpty { "{}" }
+                arguments = validateAndFixJson(arguments.toString())
             )
         )
+
+        private fun validateAndFixJson(args: String): String {
+            if (args.isBlank()) return "{}"
+
+            val trimmed = args.trim()
+
+            // Try to parse as JSON
+            return try {
+                // If it's valid JSON, return as-is
+                Json.parseToJsonElement(trimmed)
+                trimmed
+            } catch (e: Exception) {
+                Log.w("ToolCallBuilder", "Invalid JSON arguments: ${trimmed.take(100)}")
+
+                // Try to fix common issues
+                when {
+                    // Missing opening brace
+                    !trimmed.startsWith("{") && !trimmed.startsWith("[") -> {
+                        try {
+                            val fixed = "{$trimmed}"
+                            Json.parseToJsonElement(fixed)
+                            fixed
+                        } catch (e2: Exception) {
+                            "{}"
+                        }
+                    }
+                    // Incomplete JSON - try to close it
+                    trimmed.startsWith("{") && !trimmed.endsWith("}") -> {
+                        try {
+                            val fixed = "$trimmed}"
+                            Json.parseToJsonElement(fixed)
+                            fixed
+                        } catch (e2: Exception) {
+                            "{}"
+                        }
+                    }
+                    else -> "{}"
+                }
+            }
+        }
     }
     
     sealed class StreamEvent {
