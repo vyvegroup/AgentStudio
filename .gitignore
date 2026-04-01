@@ -1,0 +1,33 @@
+# Build outputs
+build/
+.gradle/
+*.apk
+*.aab
+*.so
+
+# Download folder
+download/
+
+# Keystore files - NEVER COMMIT
+*.jks
+*.keystore
+keystore.properties
+
+# Local properties
+local.properties
+
+# IDE
+.idea/
+*.iml
+
+# Native build
+AgentStudio/app/src/main/cpp/llama.cpp/
+AgentStudio/app/src/main/cpp/build/
+AgentStudio/app/src/main/jniLibs/
+AgentStudio/app/src/main/obj/
+AgentStudio/app/.cxx/
+AgentStudio/app/.externalNativeBuild/
+
+# OS files
+.DS_Store
+Thumbs.db
