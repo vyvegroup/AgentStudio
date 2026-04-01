@@ -1,6 +1,8 @@
 /**
  * llama.cpp Android JNI Interface
  * Provides native LLM inference for Android
+ *
+ * Uses llama.cpp API (latest version)
  */
 
 #include <jni.h>
@@ -11,10 +13,10 @@
 #include <atomic>
 #include <mutex>
 #include <chrono>
+#include <vector>
 
 // llama.cpp headers
 #include "llama.h"
-#include "ggml.h"
 
 #define TAG "LlamaJNI"
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, TAG, __VA_ARGS__)
@@ -24,6 +26,7 @@
 // Global state
 static llama_model* g_model = nullptr;
 static llama_context* g_ctx = nullptr;
+static const llama_vocab* g_vocab = nullptr;
 static std::string g_model_info;
 static std::atomic<bool> g_stop_generation(false);
 static std::mutex g_mutex;
@@ -53,7 +56,7 @@ Java_com_agentstudio_data_local_LlamaJNI_loadModel(
         g_ctx = nullptr;
     }
     if (g_model) {
-        llama_free_model(g_model);
+        llama_model_free(g_model);
         g_model = nullptr;
     }
 
@@ -69,37 +72,40 @@ Java_com_agentstudio_data_local_LlamaJNI_loadModel(
     // Initialize llama.cpp backend
     llama_backend_init();
 
-    // Set model parameters
+    // Get model parameters
     llama_model_params model_params = llama_model_default_params();
 
-    // Set context parameters
-    llama_context_params ctx_params = llama_context_default_params();
-    ctx_params.n_ctx = nCtx > 0 ? nCtx : DEFAULT_N_CTX;
-    ctx_params.n_threads = nThreads > 0 ? nThreads : DEFAULT_N_THREADS;
-    ctx_params.n_threads_batch = ctx_params.n_threads;
-
-    // Load model
-    g_model = llama_load_model_from_file(path, model_params);
+    // Load model using new API
+    g_model = llama_model_load_from_file(path, model_params);
     if (!g_model) {
         LOGE("Failed to load model from: %s", path);
         env->ReleaseStringUTFChars(modelPath, path);
         return JNI_FALSE;
     }
 
+    // Get context parameters
+    llama_context_params ctx_params = llama_context_default_params();
+    ctx_params.n_ctx = nCtx > 0 ? nCtx : DEFAULT_N_CTX;
+    ctx_params.n_threads = nThreads > 0 ? nThreads : DEFAULT_N_THREADS;
+    ctx_params.n_threads_batch = ctx_params.n_threads;
+
     // Create context
     g_ctx = llama_new_context_with_model(g_model, ctx_params);
     if (!g_ctx) {
         LOGE("Failed to create context");
-        llama_free_model(g_model);
+        llama_model_free(g_model);
         g_model = nullptr;
         env->ReleaseStringUTFChars(modelPath, path);
         return JNI_FALSE;
     }
 
+    // Get vocab
+    g_vocab = llama_model_get_vocab(g_model);
+
     // Get model info
-    int n_vocab = llama_n_vocab(g_model);
-    int n_ctx_train = llama_n_ctx_train(g_model);
-    int n_embd = llama_n_embd(g_model);
+    int n_vocab = llama_vocab_n_tokens(g_vocab);
+    int n_ctx_train = llama_model_n_ctx_train(g_model);
+    int n_embd = llama_model_n_embd(g_model);
 
     char info[256];
     snprintf(info, sizeof(info), "Vocab: %d, Ctx: %d, Embd: %d",
@@ -150,7 +156,7 @@ Java_com_agentstudio_data_local_LlamaJNI_generate(
     jfloat topP,
     jint topK
 ) {
-    if (!g_ctx || !g_model) {
+    if (!g_ctx || !g_model || !g_vocab) {
         return env->NewStringUTF("Error: Model not loaded");
     }
 
@@ -170,8 +176,8 @@ Java_com_agentstudio_data_local_LlamaJNI_generate(
     std::vector<llama_token> tokens;
     tokens.resize(input.size() + 1);
 
-    int n_tokens = llama_tokenize(
-        g_model,
+    int n_tokens = llama_vocab_tokenize(
+        g_vocab,
         input.c_str(),
         input.size(),
         tokens.data(),
@@ -191,7 +197,7 @@ Java_com_agentstudio_data_local_LlamaJNI_generate(
     std::string result;
     g_stop_generation = false;
 
-    // Create batch
+    // Create batch using new API
     llama_batch batch = llama_batch_init(std::max(512, maxTokens), 0, 1);
 
     // Add input tokens to batch
@@ -205,33 +211,38 @@ Java_com_agentstudio_data_local_LlamaJNI_generate(
         return env->NewStringUTF("Error: Decode failed");
     }
 
-    // Generate tokens
-    llama_token new_token_id;
-    int generated = 0;
+    // Create sampler chain
+    llama_sampler_chain_params sparams = llama_sampler_chain_default_params();
+    llama_sampler* sampler = llama_sampler_chain_init(sparams);
 
-    // Sampling parameters
-    struct llama_sampler* sampler = llama_sampler_init_greedy();  // Default
     if (temperature > 0.0f) {
-        sampler = llama_sampler_init_temp(topP, topK, temperature);
+        llama_sampler_chain_add(sampler, llama_sampler_init_top_k(topK > 0 ? topK : 40));
+        llama_sampler_chain_add(sampler, llama_sampler_init_top_p(topP, 1));
+        llama_sampler_chain_add(sampler, llama_sampler_init_temp(temperature));
+        llama_sampler_chain_add(sampler, llama_sampler_init_dist(LLAMA_DEFAULT_SEED));
+    } else {
+        llama_sampler_chain_add(sampler, llama_sampler_init_greedy());
     }
 
-    while (generated < maxTokens && !g_stop_generation) {
-        // Get logits for last token
-        float* logits = llama_get_logits_ith(g_ctx, batch.n_tokens - 1);
+    // Generate tokens
+    int generated = 0;
 
+    while (generated < maxTokens && !g_stop_generation) {
         // Sample next token
-        new_token_id = llama_sampler_sample(sampler, g_model, logits);
+        llama_token new_token_id = llama_sampler_sample(sampler, g_ctx, batch.n_tokens - 1);
 
         // Check for EOS
-        if (llama_token_is_eog(g_model, new_token_id)) {
+        if (llama_vocab_is_eog(g_vocab, new_token_id)) {
             LOGD("EOS token reached");
             break;
         }
 
         // Convert token to text
-        const char* token_str = llama_token_to_piece(g_ctx, new_token_id);
-        if (token_str) {
-            result += token_str;
+        char token_buf[32];
+        int len = llama_token_to_piece(g_vocab, new_token_id, token_buf, sizeof(token_buf), 0, false);
+        if (len > 0) {
+            token_buf[len] = '\0';
+            result += token_buf;
         }
 
         // Add new token to batch
@@ -266,7 +277,7 @@ Java_com_agentstudio_data_local_LlamaJNI_generateStream(
     jfloat temperature,
     jobject callback
 ) {
-    if (!g_ctx || !g_model) {
+    if (!g_ctx || !g_model || !g_vocab) {
         return env->NewStringUTF("Error: Model not loaded");
     }
 
@@ -282,7 +293,11 @@ Java_com_agentstudio_data_local_LlamaJNI_generateStream(
         return env->NewStringUTF("Error: Invalid callback");
     }
 
-    jmethodID callbackMethod = env->GetMethodID(callbackClass, "invoke", "(Ljava/lang/String;)Z");
+    jmethodID callbackMethod = env->GetMethodID(callbackClass, "invoke", "(Ljava/lang/Object;)Ljava/lang/Object;");
+    if (!callbackMethod) {
+        // Try with String parameter
+        callbackMethod = env->GetMethodID(callbackClass, "invoke", "(Ljava/lang/String;)Z");
+    }
     if (!callbackMethod) {
         env->ReleaseStringUTFChars(prompt, prompt_str);
         return env->NewStringUTF("Error: Callback method not found");
@@ -296,8 +311,8 @@ Java_com_agentstudio_data_local_LlamaJNI_generateStream(
     std::vector<llama_token> tokens;
     tokens.resize(input.size() + 1);
 
-    int n_tokens = llama_tokenize(
-        g_model,
+    int n_tokens = llama_vocab_tokenize(
+        g_vocab,
         input.c_str(),
         input.size(),
         tokens.data(),
@@ -326,30 +341,33 @@ Java_com_agentstudio_data_local_LlamaJNI_generateStream(
         return env->NewStringUTF("Error: Decode failed");
     }
 
+    // Create sampler
+    llama_sampler_chain_params sparams = llama_sampler_chain_default_params();
+    llama_sampler* sampler = llama_sampler_chain_init(sparams);
+    llama_sampler_chain_add(sampler, llama_sampler_init_top_k(40));
+    llama_sampler_chain_add(sampler, llama_sampler_init_top_p(0.9f, 1));
+    llama_sampler_chain_add(sampler, llama_sampler_init_temp(temperature));
+    llama_sampler_chain_add(sampler, llama_sampler_init_dist(LLAMA_DEFAULT_SEED));
+
     int generated = 0;
-    struct llama_sampler* sampler = llama_sampler_init_temp(0.9f, 40, temperature);
 
     while (generated < maxTokens && !g_stop_generation) {
-        float* logits = llama_get_logits_ith(g_ctx, batch.n_tokens - 1);
-        llama_token new_token_id = llama_sampler_sample(sampler, g_model, logits);
+        llama_token new_token_id = llama_sampler_sample(sampler, g_ctx, batch.n_tokens - 1);
 
-        if (llama_token_is_eog(g_model, new_token_id)) {
+        if (llama_vocab_is_eog(g_vocab, new_token_id)) {
             break;
         }
 
-        const char* token_str = llama_token_to_piece(g_ctx, new_token_id);
-        if (token_str) {
-            result += token_str;
+        char token_buf[32];
+        int len = llama_token_to_piece(g_vocab, new_token_id, token_buf, sizeof(token_buf), 0, false);
+        if (len > 0) {
+            token_buf[len] = '\0';
+            result += token_buf;
 
             // Call callback
-            jstring jToken = env->NewStringUTF(token_str);
-            jboolean continueGen = env->CallBooleanMethod(callback, callbackMethod, jToken);
+            jstring jToken = env->NewStringUTF(token_buf);
+            env->CallVoidMethod(callback, callbackMethod, jToken);
             env->DeleteLocalRef(jToken);
-
-            if (!continueGen) {
-                LOGD("Generation stopped by callback");
-                break;
-            }
         }
 
         llama_batch_clear(batch);
@@ -419,10 +437,11 @@ Java_com_agentstudio_data_local_LlamaJNI_freeModel(
         g_ctx = nullptr;
     }
     if (g_model) {
-        llama_free_model(g_model);
+        llama_model_free(g_model);
         g_model = nullptr;
     }
 
+    g_vocab = nullptr;
     g_model_info.clear();
     LOGI("Model freed");
 }
@@ -436,7 +455,7 @@ Java_com_agentstudio_data_local_LlamaJNI_benchmark(
     jobject /* this */,
     jint nTokens
 ) {
-    if (!g_ctx || !g_model) {
+    if (!g_ctx || !g_model || !g_vocab) {
         return -1.0f;
     }
 
@@ -448,7 +467,7 @@ Java_com_agentstudio_data_local_LlamaJNI_benchmark(
     llama_batch batch = llama_batch_init(nTokens + 64, 0, 1);
 
     // Start with BOS token
-    llama_token bos = llama_token_bos(g_model);
+    llama_token bos = llama_vocab_bos(g_vocab);
     llama_batch_add(batch, bos, 0, {0}, false);
 
     if (llama_decode(g_ctx, batch) != 0) {
@@ -456,13 +475,14 @@ Java_com_agentstudio_data_local_LlamaJNI_benchmark(
         return -1.0f;
     }
 
-    struct llama_sampler* sampler = llama_sampler_init_greedy();
+    llama_sampler_chain_params sparams = llama_sampler_chain_default_params();
+    llama_sampler* sampler = llama_sampler_chain_init(sparams);
+    llama_sampler_chain_add(sampler, llama_sampler_init_greedy());
 
     for (int i = 0; i < nTokens; i++) {
-        float* logits = llama_get_logits_ith(g_ctx, batch.n_tokens - 1);
-        llama_token new_token = llama_sampler_sample(sampler, g_model, logits);
+        llama_token new_token = llama_sampler_sample(sampler, g_ctx, batch.n_tokens - 1);
 
-        if (llama_token_is_eog(g_model, new_token)) {
+        if (llama_vocab_is_eog(g_vocab, new_token)) {
             break;
         }
 
@@ -487,26 +507,3 @@ Java_com_agentstudio_data_local_LlamaJNI_benchmark(
 }
 
 } // extern "C"
-
-// Helper function to add token to batch
-static void llama_batch_add(
-    struct llama_batch& batch,
-    llama_token id,
-    llama_pos pos,
-    std::vector<llama_seq_id> seq_ids,
-    bool logits
-) {
-    batch.token[batch.n_tokens] = id;
-    batch.pos[batch.n_tokens] = pos;
-    batch.n_seq_id[batch.n_tokens] = seq_ids.size();
-    for (size_t i = 0; i < seq_ids.size(); i++) {
-        batch.seq_id[batch.n_tokens][i] = seq_ids[i];
-    }
-    batch.logits[batch.n_tokens] = logits ? 1 : 0;
-    batch.n_tokens++;
-}
-
-// Helper function to clear batch
-static void llama_batch_clear(struct llama_batch& batch) {
-    batch.n_tokens = 0;
-}

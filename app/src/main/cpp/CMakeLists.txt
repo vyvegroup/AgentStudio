@@ -20,38 +20,47 @@ elseif(ANDROID_ABI STREQUAL "armeabi-v7a")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=armv7-a -mfpu=neon -mfloat-abi=softfp")
 endif()
 
-# Define llama.cpp sources
+# Define llama.cpp sources based on latest structure
 set(LLAMA_SOURCES
+    # Core llama sources
     ${LLAMA_CPP_DIR}/src/llama.cpp
-    ${LLAMA_CPP_DIR}/src/ggml.c
-    ${LLAMA_CPP_DIR}/src/ggml-alloc.c
-    ${LLAMA_CPP_DIR}/src/ggml-backend.cpp
-    ${LLAMA_CPP_DIR}/src/ggml-quants.c
     ${LLAMA_CPP_DIR}/src/unicode.cpp
     ${LLAMA_CPP_DIR}/src/unicode-data.cpp
 )
 
-# Platform-specific ggml backend
+# GGML sources (new structure)
+set(GGML_SOURCES
+    ${LLAMA_CPP_DIR}/ggml/src/ggml.c
+    ${LLAMA_CPP_DIR}/ggml/src/ggml-alloc.c
+    ${LLAMA_CPP_DIR}/ggml/src/ggml-backend.cpp
+    ${LLAMA_CPP_DIR}/ggml/src/ggml-quants.c
+)
+
+# CPU backend sources
+set(CPU_SOURCES
+    ${LLAMA_CPP_DIR}/ggml/src/ggml-cpu/ggml-cpu.cpp
+    ${LLAMA_CPP_DIR}/ggml/src/ggml-cpu/ggml-cpu.c
+)
+
+# Platform-specific optimizations
 if(ANDROID_ABI STREQUAL "arm64-v8a" OR ANDROID_ABI STREQUAL "armeabi-v7a")
-    list(APPEND LLAMA_SOURCES
-        ${LLAMA_CPP_DIR}/src/ggml-cpu/ggml-cpu.c
-        ${LLAMA_CPP_DIR}/src/ggml-cpu/arch/arm/neon.c
-        ${LLAMA_CPP_DIR}/src/ggml-cpu/arch/arm/quants.c
-    )
-else()
-    list(APPEND LLAMA_SOURCES
-        ${LLAMA_CPP_DIR}/src/ggml-cpu/ggml-cpu.c
+    list(APPEND CPU_SOURCES
+        ${LLAMA_CPP_DIR}/ggml/src/ggml-cpu/arch/arm/neon.c
     )
 endif()
 
+# Combine all sources
+set(ALL_SOURCES ${LLAMA_SOURCES} ${GGML_SOURCES} ${CPU_SOURCES})
+
 # Create static library for llama.cpp
-add_library(llama STATIC ${LLAMA_SOURCES})
+add_library(llama STATIC ${ALL_SOURCES})
 
 target_include_directories(llama PUBLIC
-    ${LLAMA_CPP_DIR}/src
     ${LLAMA_CPP_DIR}/include
+    ${LLAMA_CPP_DIR}/src
     ${LLAMA_CPP_DIR}/ggml/include
     ${LLAMA_CPP_DIR}/ggml/src
+    ${LLAMA_CPP_DIR}/ggml/src/ggml-cpu
 )
 
 target_compile_definitions(llama PUBLIC
@@ -61,9 +70,6 @@ target_compile_definitions(llama PUBLIC
     __ARM_FEATURE_FMA
     __ARM_FEATURE_DOTPROD
 )
-
-# Disable llamafile (causes build issues)
-target_compile_definitions(llama PUBLIC GGML_LLAMAFILE=OFF)
 
 # Link libraries for llama
 target_link_libraries(llama
@@ -77,8 +83,8 @@ add_library(llama-android SHARED
 )
 
 target_include_directories(llama-android PRIVATE
-    ${LLAMA_CPP_DIR}/src
     ${LLAMA_CPP_DIR}/include
+    ${LLAMA_CPP_DIR}/src
     ${LLAMA_CPP_DIR}/ggml/include
     ${LLAMA_CPP_DIR}/ggml/src
 )
