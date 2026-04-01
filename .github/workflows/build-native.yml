@@ -12,10 +12,6 @@ on:
         required: false
         default: 'true'
 
-env:
-  NDK_VERSION: r26d
-  CMAKE_VERSION: 3.22.1
-
 jobs:
   build-native:
     name: Build Native Libraries
@@ -34,17 +30,23 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Setup Android SDK
+      - name: Setup Android SDK with NDK
         uses: android-actions/setup-android@v3
-
-      - name: Install NDK and CMake
-        run: |
-          sdkmanager --install "ndk;${{ env.NDK_VERSION }}" "cmake;${{ env.CMAKE_VERSION }}"
+        with:
+          packages: 'ndk;26.3.11579264 cmake;3.22.1'
 
       - name: Clone llama.cpp
         run: |
           cd app/src/main/cpp
           git clone --depth 1 https://github.com/ggerganov/llama.cpp.git
+
+      - name: Get NDK path
+        id: ndk
+        run: |
+          NDK_PATH=$(ls -d $ANDROID_HOME/ndk/*/ | head -1)
+          echo "ndk_path=$NDK_PATH" >> $GITHUB_OUTPUT
+          CMAKE_PATH=$(ls -d $ANDROID_HOME/cmake/*/bin | head -1)
+          echo "cmake_path=$CMAKE_PATH" >> $GITHUB_OUTPUT
 
       - name: Build native library for ${{ matrix.abi }}
         run: |
@@ -52,8 +54,8 @@ jobs:
           mkdir -p build-${{ matrix.abi }}
           cd build-${{ matrix.abi }}
 
-          $ANDROID_HOME/cmake/${{ env.CMAKE_VERSION }}/bin/cmake \
-            -DCMAKE_TOOLCHAIN_FILE=$ANDROID_HOME/ndk/${{ env.NDK_VERSION }}/build/cmake/android.toolchain.cmake \
+          ${{ steps.ndk.outputs.cmake_path }}/cmake \
+            -DCMAKE_TOOLCHAIN_FILE=${{ steps.ndk.outputs.ndk_path }}build/cmake/android.toolchain.cmake \
             -DANDROID_ABI=${{ matrix.abi }} \
             -DANDROID_PLATFORM=android-26 \
             -DCMAKE_BUILD_TYPE=Release \
@@ -98,6 +100,9 @@ jobs:
           name: native-armeabi-v7a
           path: app/src/main/jniLibs/armeabi-v7a
 
+      - name: List downloaded libraries
+        run: ls -la app/src/main/jniLibs/*/
+
       - name: Make gradlew executable
         run: chmod +x gradlew
 
@@ -124,8 +129,11 @@ jobs:
             -keypass agentstudio123 \
             -dname "CN=AgentStudio, OU=Dev, O=AgentStudio, L=City, ST=State, C=US"
 
+          # Get build-tools version
+          BUILD_TOOLS=$(ls $ANDROID_HOME/build-tools/ | sort -V | tail -1)
+
           # Sign APK
-          $ANDROID_HOME/build-tools/34.0.0/apksigner sign \
+          $ANDROID_HOME/build-tools/$BUILD_TOOLS/apksigner sign \
             --ks release.keystore \
             --ks-pass pass:agentstudio123 \
             --key-pass pass:agentstudio123 \
