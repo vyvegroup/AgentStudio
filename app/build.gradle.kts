@@ -78,7 +78,6 @@ android {
     buildFeatures {
         compose = true
         buildConfig = true
-        nativeScript = true
     }
 
     composeOptions {
