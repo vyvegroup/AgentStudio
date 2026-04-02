@@ -33,8 +33,6 @@ object VenCAStorage {
             // Create or get master key
             masterKey = MasterKey.Builder(context)
                 .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
-                .setKeyAlias("venca_master_key")
-                .setRequestStrongBoxBacked(true)
                 .build()
             
             // Create encrypted shared preferences

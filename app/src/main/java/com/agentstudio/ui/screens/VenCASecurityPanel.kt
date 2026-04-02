@@ -183,7 +183,7 @@ private fun SecurityScoreCard(
                     contentAlignment = Alignment.Center
                 ) {
                     CircularProgressIndicator(
-                        progress = { score / 100f },
+                        progress = score / 100f,
                         color = scoreColor,
                         strokeWidth = 8.dp,
                         trackColor = scoreColor.copy(alpha = 0.2f),

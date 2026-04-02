@@ -8,6 +8,9 @@ package com.agentstudio.security
  */
 object VenCANative {
     
+    var isNativeLoaded = false
+        private set
+    
     init {
         try {
             System.loadLibrary("venca_security")
@@ -16,9 +19,6 @@ object VenCANative {
             isNativeLoaded = false
         }
     }
-    
-    var isNativeLoaded = false
-        private set
     
     /**
      * Encrypt string using native XOR encryption
