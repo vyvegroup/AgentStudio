@@ -28,14 +28,6 @@ android {
         ndk {
             abiFilters += listOf("armeabi-v7a", "arm64-v8a", "x86", "x86_64")
         }
-        
-        // Enable native security layer
-        externalNativeBuild {
-            cmake {
-                cppFlags += listOf("-std=c++17", "-O3", "-fvisibility=hidden", "-ffunction-sections", "-fdata-sections")
-                arguments += listOf("-DANDROID_STL=c++_shared")
-            }
-        }
     }
 
     // VenCA Native Security Layer (NDK)
@@ -87,10 +79,6 @@ android {
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
-        }
-        // Strip debug symbols from native libraries
-        jniLibs {
-            useLegacyPackaging = true
         }
     }
     
@@ -147,16 +135,9 @@ dependencies {
     // DataStore
     implementation("androidx.datastore:datastore-preferences:1.0.0")
     
-    // ==================== VenCA Security Dependencies ====================
-    // Encrypted SharedPreferences
+    // VenCA Security Dependencies
     implementation("androidx.security:security-crypto:1.1.0-alpha06")
-    implementation("androidx.security:security-crypto-ktx:1.1.0-alpha06")
-    
-    // App Integrity API
     implementation("com.google.android.play:integrity:1.3.0")
-    
-    // Biometric for secure authentication
-    implementation("androidx.biometric:biometric:1.1.0")
 
     // Testing
     testImplementation("junit:junit:4.13.2")
