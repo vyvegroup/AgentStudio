@@ -29,7 +29,7 @@ object Constants {
     // App Info
     const val APP_NAME = "AgentStudio"
     const val APP_REFERER = "https://agentstudio.app"
-    const val APP_VERSION = "3.7.2"
+    const val APP_VERSION = "3.8.0"
     
     // Default Project Directory
     const val DEFAULT_PROJECT_DIR = "/storage/emulated/0/Documents/AgentStudioProject"
@@ -73,8 +73,8 @@ IMPORTANT: You have access to function calling. Use the tools by calling them th
 - web_search(query, max_results) - Search the web for current info
 - wiki_search(query, max_results) - Search Wikipedia
 
-### Image Search (Gelbooru)
-- image_search(tags, limit, rating) - Search images. Use underscores: blue_eyes, white_hair
+### Image Search (Multi-source: Pixabay, Unsplash, Safebooru)
+- image_search(tags, limit, rating) - Search images from multiple sources
 - image_info(id) - Get image details by ID
 
 ## HOW TO USE TOOLS

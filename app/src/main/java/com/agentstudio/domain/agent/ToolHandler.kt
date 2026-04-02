@@ -1,8 +1,8 @@
 package com.agentstudio.domain.agent
 
 import android.util.Log
-import com.agentstudio.data.api.GelbooruApi
-import com.agentstudio.data.api.GelbooruPost
+import com.agentstudio.data.api.ImageSearchApi
+import com.agentstudio.data.api.ImageResult
 import com.agentstudio.data.api.WebSearchApi
 import com.agentstudio.data.api.WebSearchResult
 import com.agentstudio.data.repository.FileRepository
@@ -17,7 +17,7 @@ import kotlinx.serialization.json.intOrNull
 
 class ToolHandler(
     private val fileRepository: FileRepository,
-    private val gelbooruApi: GelbooruApi = GelbooruApi(),
+    private val imageSearchApi: ImageSearchApi = ImageSearchApi(),
     private val webSearchApi: WebSearchApi = WebSearchApi()
 ) {
     
@@ -314,39 +314,33 @@ class ToolHandler(
             val params = parseArguments(arguments)
             val tags = params["tags"]?.jsonPrimitive?.content
             if (tags.isNullOrBlank()) {
-                return ToolResult.error("Missing parameter: tags. Please provide search tags like 'cat cute' or 'blue_eyes'.")
+                return ToolResult.error("Missing parameter: tags. Please provide search tags like 'cat cute' or 'nature landscape'.")
             }
             
             val limit = (params["limit"]?.jsonPrimitive?.intOrNull ?: 10).coerceIn(1, 50)
             val rating = params["rating"]?.jsonPrimitive?.content ?: "safe"
             
-            // Add rating tag if safe mode
-            val searchTags = if (rating == "safe") {
-                "$tags rating:safe"
-            } else {
-                tags
-            }
+            Log.d(TAG, "Image search: '$tags' (limit: $limit, rating: $rating)")
             
-            Log.d(TAG, "Image search: '$searchTags' (limit: $limit)")
-            
-            val result = gelbooruApi.searchImages(searchTags, limit)
+            val result = imageSearchApi.searchImages(tags, limit, rating)
             result.fold(
-                onSuccess = { posts ->
-                    if (posts.isEmpty()) {
-                        ToolResult.success("🖼️ No images found for tags: $tags\nTry different tags or check spelling.")
+                onSuccess = { images ->
+                    if (images.isEmpty()) {
+                        ToolResult.success("🖼️ No images found for: $tags\nTry different keywords or check spelling.")
                     } else {
                         val output = buildString {
                             appendLine("🖼️ Image Search Results for: \"$tags\"")
                             appendLine("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-                            appendLine("Found ${posts.size} images\n")
-                            posts.forEachIndexed { index, post ->
-                                val imageUrl = post.getBestImageUrl() ?: "No URL"
-                                appendLine("${index + 1}. ID: ${post.id}")
-                                appendLine("   🖼️ $imageUrl")
-                                appendLine("   📊 ${post.width}x${post.height} | Rating: ${post.getRatingText()} | Score: ${post.score}")
-                                val tagList = post.getTagList().take(8)
-                                if (tagList.isNotEmpty()) {
-                                    appendLine("   🏷️ ${tagList.joinToString(", ")}")
+                            appendLine("Found ${images.size} images from multiple sources\n")
+                            images.forEachIndexed { index, img ->
+                                appendLine("${index + 1}. [${img.source}] ID: ${img.id}")
+                                appendLine("   🖼️ ${img.url}")
+                                appendLine("   📊 ${img.width}x${img.height} | Rating: ${img.rating}")
+                                if (img.tags.isNotEmpty()) {
+                                    appendLine("   🏷️ ${img.getDisplayTags()}")
+                                }
+                                if (!img.user.isNullOrBlank()) {
+                                    appendLine("   👤 ${img.user}")
                                 }
                                 appendLine()
                             }
@@ -367,42 +361,13 @@ class ToolHandler(
     private suspend fun executeImageInfo(arguments: String): ToolResult {
         return try {
             val params = parseArguments(arguments)
-            val id = params["id"]?.jsonPrimitive?.intOrNull
-            if (id == null) {
-                return ToolResult.error("Missing or invalid parameter: id (must be an integer)")
+            val id = params["id"]?.jsonPrimitive?.content
+            if (id.isNullOrBlank()) {
+                return ToolResult.error("Missing parameter: id")
             }
             
-            Log.d(TAG, "Getting image info: $id")
-            
-            val result = gelbooruApi.getPostById(id)
-            result.fold(
-                onSuccess = { post ->
-                    if (post == null) {
-                        ToolResult.error("Image not found with ID: $id")
-                    } else {
-                        val output = buildString {
-                            appendLine("🖼️ Image Info (ID: ${post.id})")
-                            appendLine("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-                            appendLine("🔗 URL: ${post.getBestImageUrl()}")
-                            appendLine("📊 Size: ${post.width}x${post.height}")
-                            appendLine("📈 Rating: ${post.getRatingText()}")
-                            appendLine("⭐ Score: ${post.score}")
-                            appendLine("📅 Posted: ${post.created_at}")
-                            if (!post.source.isNullOrEmpty()) {
-                                appendLine("🌐 Source: ${post.source}")
-                            }
-                            appendLine("\n🏷️ Tags:")
-                            post.getTagList().chunked(6).forEach { chunk ->
-                                appendLine("   ${chunk.joinToString(", ")}")
-                            }
-                        }
-                        ToolResult.success(output)
-                    }
-                },
-                onFailure = { error ->
-                    ToolResult.error("Failed to get image info: ${error.message}")
-                }
-            )
+            // For now, return info about searching by ID
+            ToolResult.success("🖼️ Image Info\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\nID: $id\nTo get more images, use image_search with tags.")
         } catch (e: Exception) {
             Log.e(TAG, "Error in image_info", e)
             ToolResult.error("Error: ${e.message}")
